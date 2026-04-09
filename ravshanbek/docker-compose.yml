@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    container_name: olimpiada-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      SQLITE_DB_PATH: /app/data/olimpiada.db
+      PORT: "3000"
+    volumes:
+      - app_data:/app/data
+
+volumes:
+  app_data:

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="uz">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Simsiz tarmoqlar olimpiadasi — Ro'yxatdan o'tish</title>
+        <link rel="stylesheet" href="/style.css" />
+    </head>
+    <body>
+        <div class="page">
+            <header class="hero">
+                <div class="hero-inner">
+                    <div class="badge">📡 Olimpiada 2026</div>
+                    <h1>Simsiz tarmoqlar fanidan olimpiada</h1>
+                    <p class="subtitle">Talabalar uchun bilim sinovi. Avval ro'yxatdan o'ting, test havolasi alohida beriladi.</p>
+                    
+                </div>
+            </header>
+
+            <main class="container">
+                <div class="card">
+                    <h2>Ro'yxatdan o'tish</h2>
+                    <p class="muted">Quyidagi ma'lumotlarni to'ldiring. Test sahifasi havolasi keyin alohida beriladi.</p>
+
+                    <form id="regForm" class="form">
+                        <div class="field">
+                            <label for="full_name">F.I.Sh <span class="req">*</span></label>
+                            <input type="text" id="full_name" name="full_name" placeholder="Ismingiz Familiyangiz Otangizning ismi" required />
+                        </div>
+
+                        <div class="row">
+                            <div class="field">
+                                <label for="direction">Yo'nalish <span class="req">*</span></label>
+                                <input type="text" id="direction" name="direction" placeholder="Masalan: Telekommunikatsiya texnologiyalari" required />
+                            </div>
+                            <div class="field">
+                                <label for="course">Kurs <span class="req">*</span></label>
+                                <select id="course" name="course" required>
+                                    <option value="">Tanlang</option>
+                                    <option value="1-kurs">1-kurs</option>
+                                    <option value="2-kurs">2-kurs</option>
+                                    <option value="3-kurs">3-kurs</option>
+                                    <option value="4-kurs">4-kurs</option>
+                                    <option value="Magistratura">Magistratura</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="field">
+                                <label for="email">Email <span class="req">*</span></label>
+                                <input type="email" id="email" name="email" placeholder="sizning@email.com" required />
+                            </div>
+                            <div class="field">
+                                <label for="phone">Telefon raqam <span class="req">*</span></label>
+                                <input type="tel" id="phone" name="phone" placeholder="+998 90 123 45 67" required />
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" id="submitBtn">Ro'yxatdan o'tish</button>
+                    </form>
+
+                    <div id="message" class="message hidden"></div>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-icon">📝</div>
+                        <h3>1-bosqich</h3>
+                        <p>Ro'yxatdan o'tish va ma'lumotlarni tasdiqlash</p>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-icon">💻</div>
+                        <h3>2-bosqich</h3>
+                        <p>Onlayn test topshirish</p>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-icon">🏆</div>
+                        <h3>3-bosqich</h3>
+                        <p>G'oliblarni e'lon qilish va mukofotlash</p>
+                    </div>
+                </div>
+            </main>
+
+            <footer class="footer">
+                <p>© 2026 Simsiz tarmoqlar olimpiadasi</p>
+            </footer>
+        </div>
+
+        <script src="/app.js"></script>
+    </body>
+</html>
+

@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+.env
+dist-kiosk
+kiosk-client/node_modules
+ops/windows-kiosk
+olimpiada.db
+data
+*.log

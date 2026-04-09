@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="uz">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Test — Simsiz tarmoqlar olimpiadasi</title>
+        <link rel="stylesheet" href="/style.css" />
+    </head>
+    <body class="test-body">
+        <!-- STEP 1: Email verification -->
+        <div id="emailStep" class="center-page">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="badge">📝 Test bosqichi</div>
+                    <h2>Testga kirish</h2>
+                    <p class="muted">Ro'yxatdan o'tgan emailingizni kiriting</p>
+                </div>
+                <form id="emailForm" class="form">
+                    <div class="field">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" required autofocus placeholder="sizning@email.com" />
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="startBtn">Testni boshlash</button>
+                    <div id="emailMsg" class="message hidden"></div>
+                </form>
+                <div class="login-footer">
+                    <a href="/">← Bosh sahifa</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 2: Test in progress -->
+        <div id="testStep" class="hidden">
+            <header class="test-header">
+                <div class="test-header-inner">
+                    <div>
+                        <div class="test-title">Simsiz tarmoqlar olimpiadasi</div>
+                        <div class="test-student" id="studentInfo"></div>
+                    </div>
+                    <div class="timer" id="timer">--:--</div>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            </header>
+
+            <div id="examWatermark" class="exam-watermark hidden" aria-hidden="true"></div>
+            <div id="securityAlert" class="security-alert hidden"></div>
+            <div id="focusWarningModal" class="focus-warning-modal hidden" role="dialog" aria-modal="true" aria-live="assertive">
+                <div class="focus-warning-card">
+                    <h3>Diqqat: Birinchi Ogohlantirish</h3>
+                    <p id="focusWarningText">
+                        Siz test oynasidan chiqdingiz. Yana bir marta chiqilsa test avtomatik yakunlanadi.
+                    </p>
+                    <button id="focusWarningOkBtn" class="btn btn-primary" type="button">Tushundim</button>
+                </div>
+            </div>
+
+            <main class="test-container">
+                <div id="questionsContainer"></div>
+                <div class="test-footer">
+                    <div class="answered-info" id="answeredInfo">0 / 0 javob berilgan</div>
+                    <div class="test-nav-actions">
+                        <button id="prevQuestionBtn" class="btn btn-ghost" type="button">Oldingi</button>
+                        <button id="nextQuestionBtn" class="btn btn-primary" type="button">Keyingi</button>
+                        <button id="submitTestBtn" class="btn btn-success btn-large" type="button">Testni yakunlash</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- STEP 3: Result -->
+        <div id="resultStep" class="center-page hidden">
+            <div class="result-card">
+                <div class="result-emoji" id="resultEmoji">🎉</div>
+                <h2 id="resultTitle">Test yakunlandi!</h2>
+                <div class="result-score">
+                    <div class="score-big" id="scoreBig">0</div>
+                    <div class="score-total" id="scoreTotal">/ 0</div>
+                </div>
+                <div class="score-pct" id="scorePct">0%</div>
+                <p class="muted" id="resultMsg">Natijangiz yuqorida ko'rsatilgan.</p>
+                <a href="/" class="btn btn-primary">Bosh sahifaga qaytish</a>
+            </div>
+        </div>
+
+                <script>
+            let attemptId = null
+            let attemptToken = null
+            let questions = []
+            let answers = {}
+            let endsAt = null
+            let timerInterval = null
+            let currentQuestionIndex = 0
+            let testFinished = false
+            let activeStudent = null
+            let tabSwitchCount = 0
+            let tabSwitchMaxAllowed = 3
+            let antiCheatEnabled = false
+            let watermarkInterval = null
+            let securityAlertTimeout = null
+            let lastBlurAt = 0
+            let lastFocusLossAt = 0
+            const BLOCKED_SHORTCUTS = new Set(['a', 'c', 'p', 's', 'u', 'x', 'i', 'j'])
+            const queryParams = new URLSearchParams(window.location.search)
+            const prefilledEmail = (queryParams.get('email') || '').trim()
+            const isKioskClient = !!window.kioskBridge || queryParams.get('kiosk') === '1'
+            let heartbeatInterval = null
+            let heartbeatFailCount = 0
+            let heartbeatFailLimit = 3
+            let heartbeatIntervalMs = 8000
+            const focusWarningModal = document.getElementById('focusWarningModal')
+            const focusWarningText = document.getElementById('focusWarningText')
+            const focusWarningOkBtn = document.getElementById('focusWarningOkBtn')
+
+            document.getElementById('emailForm').addEventListener('submit', async (e) => {
+                e.preventDefault()
+                const email = document.getElementById('email').value.trim()
+                const msg = document.getElementById('emailMsg')
+                const btn = document.getElementById('startBtn')
+                btn.disabled = true
+                btn.textContent = 'Yuklanmoqda...'
+                msg.className = 'message hidden'
+
+                try {
+                    const res = await fetch('/api/test/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, client_mode: isKioskClient ? 'kiosk' : 'web' }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        attemptId = data.data.attemptId
+                        attemptToken = data.data.attemptToken
+                        questions = Array.isArray(data.data.questions) ? data.data.questions : []
+                        answers = {}
+                        endsAt = new Date(data.data.endsAt).getTime()
+                        currentQuestionIndex = 0
+                        testFinished = false
+                        activeStudent = data.data.student || null
+                        tabSwitchCount = Number.isInteger(data.data.tabSwitchCount) ? data.data.tabSwitchCount : 0
+                        tabSwitchMaxAllowed =
+                            data.data.antiCheat && Number.isInteger(data.data.antiCheat.tabSwitchMaxAllowed)
+                                ? data.data.antiCheat.tabSwitchMaxAllowed
+                                : 3
+                        heartbeatIntervalMs =
+                            data.data.antiCheat && Number.isInteger(data.data.antiCheat.heartbeatIntervalSec)
+                                ? Math.max(3000, data.data.antiCheat.heartbeatIntervalSec * 1000)
+                                : 8000
+                        document.getElementById('studentInfo').textContent = activeStudent ? activeStudent.full_name : ''
+                        if (window.kioskBridge && window.kioskBridge.setAttemptContext) {
+                            window.kioskBridge.setAttemptContext({ attemptId, attemptToken })
+                        }
+                        showTest()
+                    } else {
+                        msg.textContent = 'X ' + (data.message || 'Xatolik')
+                        msg.className = 'message error'
+                    }
+                } catch (err) {
+                    msg.textContent = 'X Server bilan bog\'lanib bo\'lmadi'
+                    msg.className = 'message error'
+                } finally {
+                    btn.disabled = false
+                    btn.textContent = 'Testni boshlash'
+                }
+            })
+
+            if (prefilledEmail) {
+                document.getElementById('email').value = prefilledEmail
+            }
+            if (isKioskClient) {
+                const backFooter = document.querySelector('.login-footer')
+                if (backFooter) {
+                    backFooter.classList.add('hidden')
+                }
+            }
+            focusWarningOkBtn.addEventListener('click', () => {
+                hideFocusWarningModal()
+                try {
+                    window.focus()
+                } catch {
+                    // ignore
+                }
+            })
+
+            function renderQuestionCard(q, idx) {
+                const head = `
+                    <div class="question-number">Savol ${idx + 1} / ${questions.length}</div>
+                    <div class="question-text">${escapeHtml(q.text)}</div>
+                `
+
+                if (q.type === 'single_choice') {
+                    const optionOrder = Array.isArray(q.optionOrder) && q.optionOrder.length ? q.optionOrder : ['A', 'B', 'C', 'D']
+                    return `
+                        <div class="question-card" data-qid="${q.id}">
+                            ${head}
+                            <div class="options">
+                                ${optionOrder
+                                    .map(
+                                        (letter) => `
+                                        <label class="option">
+                                            <input type="radio" data-question-type="single_choice" data-qid="${q.id}" name="q${q.id}" value="${letter}" />
+                                            <span class="option-letter">${letter}</span>
+                                            <span class="option-text">${escapeHtml((q.options || {})[letter] || '')}</span>
+                                        </label>
+                                    `
+                                    )
+                                    .join('')}
+                            </div>
+                        </div>
+                    `
+                }
+
+                if (q.type === 'multiple_choice') {
+                    const optionOrder = Array.isArray(q.optionOrder) && q.optionOrder.length ? q.optionOrder : ['A', 'B', 'C', 'D']
+                    return `
+                        <div class="question-card" data-qid="${q.id}">
+                            ${head}
+                            <div class="muted" style="margin-bottom:8px">Bir nechta variant tanlashingiz mumkin.</div>
+                            <div class="options">
+                                ${optionOrder
+                                    .map(
+                                        (letter) => `
+                                        <label class="option">
+                                            <input type="checkbox" data-question-type="multiple_choice" data-qid="${q.id}" name="q${q.id}" value="${letter}" />
+                                            <span class="option-letter">${letter}</span>
+                                            <span class="option-text">${escapeHtml((q.options || {})[letter] || '')}</span>
+                                        </label>
+                                    `
+                                    )
+                                    .join('')}
+                            </div>
+                        </div>
+                    `
+                }
+
+                if (q.type === 'text_input') {
+                    return `
+                        <div class="question-card" data-qid="${q.id}">
+                            ${head}
+                            <div class="field">
+                                <label>Javobingiz</label>
+                                <input
+                                    type="text"
+                                    data-question-type="text_input"
+                                    data-qid="${q.id}"
+                                    placeholder="${escapeHtml(q.placeholder || 'Javobingizni kiriting')}"
+                                />
+                            </div>
+                        </div>
+                    `
+                }
+
+                return `
+                    <div class="question-card" data-qid="${q.id}">
+                        ${head}
+                        <div class="muted" style="margin-bottom:8px">Chap va o'ng mos juftliklarni tanlang.</div>
+                        <div class="options">
+                            ${(q.leftItems || [])
+                                .map(
+                                    (left) => `
+                                    <div class="row" style="align-items:center; margin-bottom:8px">
+                                        <div style="flex:1; font-weight:600">${escapeHtml(left.text)}</div>
+                                        <div style="flex:1">
+                                            <select data-question-type="matching" data-qid="${q.id}" data-left-id="${escapeHtml(left.id)}" style="width:100%">
+                                                <option value="">Tanlang</option>
+                                                ${(q.rightOptions || [])
+                                                    .map((r) => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.text)}</option>`)
+                                                    .join('')}
+                                            </select>
+                                        </div>
+                                    </div>
+                                `
+                                )
+                                .join('')}
+                        </div>
+                    </div>
+                `
+            }
+
+            function showTest() {
+                document.getElementById('emailStep').classList.add('hidden')
+                document.getElementById('testStep').classList.remove('hidden')
+
+                const container = document.getElementById('questionsContainer')
+                container.innerHTML = questions.map(renderQuestionCard).join('')
+                hideFocusWarningModal()
+
+                setupQuestionAnswerHandlers(container)
+                setupNavigationHandlers()
+                setupAntiCheatGuards()
+                startWatermark()
+                renderCurrentQuestion()
+                updateProgress()
+                startTimer()
+                startHeartbeat()
+                if (tabSwitchCount > 0) {
+                    const remaining = Math.max(0, tabSwitchMaxAllowed - tabSwitchCount)
+                    if (tabSwitchCount === 1 && remaining >= 1) {
+                        showFocusWarningModal("Avvalgi urinishdan 1 ta chiqish qayd etilgan. Yana bir marta chiqilsa test yakunlanadi.")
+                    } else {
+                        showSecurityAlert(`Avvalgi urinishdan ${tabSwitchCount} ta chiqish qayd etilgan. Qolgan limit: ${remaining}.`, 'warn')
+                    }
+                }
+            }
+
+            function setupQuestionAnswerHandlers(container) {
+                if (container.dataset.bound === '1') return
+
+                container.addEventListener('change', (e) => {
+                    const t = e.target
+                    const qId = t.dataset.qid
+                    if (!qId) return
+
+                    if (t.dataset.questionType === 'single_choice') {
+                        answers[qId] = t.value
+                    } else if (t.dataset.questionType === 'multiple_choice') {
+                        const selected = Array.from(container.querySelectorAll(`input[data-question-type="multiple_choice"][name="q${qId}"]:checked`)).map((el) => el.value)
+                        if (selected.length) answers[qId] = selected
+                        else delete answers[qId]
+                    } else if (t.dataset.questionType === 'matching') {
+                        const selected = {}
+                        container.querySelectorAll(`select[data-question-type="matching"][data-qid="${qId}"]`).forEach((el) => {
+                            if (el.value) selected[el.dataset.leftId] = el.value
+                        })
+                        if (Object.keys(selected).length) answers[qId] = selected
+                        else delete answers[qId]
+                    }
+                    updateProgress()
+                })
+
+                container.addEventListener('input', (e) => {
+                    const t = e.target
+                    if (t.dataset.questionType !== 'text_input') return
+                    const qId = t.dataset.qid
+                    const value = t.value.trim()
+                    if (value) answers[qId] = value
+                    else delete answers[qId]
+                    updateProgress()
+                })
+
+                container.dataset.bound = '1'
+            }
+
+            function setupNavigationHandlers() {
+                const submitBtn = document.getElementById('submitTestBtn')
+                const prevBtn = document.getElementById('prevQuestionBtn')
+                const nextBtn = document.getElementById('nextQuestionBtn')
+                if (submitBtn.dataset.bound === '1') return
+
+                submitBtn.addEventListener('click', () => submitTest())
+                prevBtn.addEventListener('click', () => {
+                    if (currentQuestionIndex > 0) {
+                        currentQuestionIndex -= 1
+                        renderCurrentQuestion()
+                        updateProgress()
+                    }
+                })
+                nextBtn.addEventListener('click', () => {
+                    if (currentQuestionIndex < questions.length - 1) {
+                        currentQuestionIndex += 1
+                        renderCurrentQuestion()
+                        updateProgress()
+                    }
+                })
+
+                submitBtn.dataset.bound = '1'
+            }
+
+            function renderCurrentQuestion() {
+                const cards = Array.from(document.querySelectorAll('#questionsContainer .question-card'))
+                cards.forEach((card, idx) => {
+                    card.classList.toggle('hidden', idx !== currentQuestionIndex)
+                })
+
+                const prevBtn = document.getElementById('prevQuestionBtn')
+                const nextBtn = document.getElementById('nextQuestionBtn')
+                prevBtn.disabled = currentQuestionIndex <= 0
+                nextBtn.disabled = currentQuestionIndex >= cards.length - 1
+            }
+
+            function isQuestionAnswered(question, answer) {
+                if (question.type === 'single_choice') return typeof answer === 'string' && answer.length > 0
+                if (question.type === 'multiple_choice') return Array.isArray(answer) && answer.length > 0
+                if (question.type === 'text_input') return typeof answer === 'string' && answer.trim().length > 0
+                if (!answer || typeof answer !== 'object') return false
+                const totalPairs = Array.isArray(question.leftItems) ? question.leftItems.length : 0
+                return Object.keys(answer).length === totalPairs && totalPairs > 0
+            }
+
+            function updateProgress() {
+                const answered = questions.filter((q) => isQuestionAnswered(q, answers[q.id])).length
+                const total = questions.length || 1
+                document.getElementById('answeredInfo').textContent = `${currentQuestionIndex + 1} / ${questions.length} savol • ${answered} / ${questions.length} javob berilgan`
+                document.getElementById('progressFill').style.width = (answered / total) * 100 + '%'
+            }
+
+            function startTimer() {
+                if (timerInterval) clearInterval(timerInterval)
+                const tick = () => {
+                    if (testFinished) return
+                    const now = Date.now()
+                    const remaining = Math.max(0, endsAt - now)
+                    const min = Math.floor(remaining / 60000)
+                    const sec = Math.floor((remaining % 60000) / 1000)
+                    const el = document.getElementById('timer')
+                    el.textContent = String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0')
+                    if (remaining < 60000) el.classList.add('timer-warning')
+                    if (remaining <= 0) {
+                        clearInterval(timerInterval)
+                        timerInterval = null
+                        showSecurityAlert('Vaqt tugadi. Test avtomatik yakunlanadi.', 'error')
+                        submitTest({ force: true, skipConfirm: true })
+                    }
+                }
+                tick()
+                timerInterval = setInterval(tick, 1000)
+            }
+
+            async function submitTest(options = {}) {
+                if (testFinished || !attemptId) return
+                const force = !!options.force
+                const skipConfirm = !!options.skipConfirm
+                const unanswered = questions.filter((q) => !isQuestionAnswered(q, answers[q.id])).length
+                if (!force && unanswered > 0 && !skipConfirm) {
+                    if (!confirm(`${unanswered} ta savolga javob bermadingiz. Haqiqatdan yakunlashni xohlaysizmi?`)) return
+                }
+                clearInterval(timerInterval)
+                timerInterval = null
+                document.getElementById('submitTestBtn').disabled = true
+                document.getElementById('prevQuestionBtn').disabled = true
+                document.getElementById('nextQuestionBtn').disabled = true
+
+                try {
+                    const res = await fetch('/api/test/submit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attemptId, attemptToken, answers }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        showResult(data.data)
+                    } else {
+                        alert('Xatolik: ' + data.message)
+                        document.getElementById('submitTestBtn').disabled = false
+                        renderCurrentQuestion()
+                        startTimer()
+                    }
+                } catch (err) {
+                    alert("Server bilan bog'lanib bo'lmadi")
+                    document.getElementById('submitTestBtn').disabled = false
+                    renderCurrentQuestion()
+                    startTimer()
+                }
+            }
+
+            function showResult({ score, total, percentage, timedOut, endedByPolicy, reason }) {
+                testFinished = true
+                clearInterval(timerInterval)
+                timerInterval = null
+                stopHeartbeat()
+                hideFocusWarningModal()
+                stopWatermark()
+                teardownAntiCheatGuards()
+                if (window.kioskBridge && window.kioskBridge.clearAttemptContext) {
+                    window.kioskBridge.clearAttemptContext()
+                }
+                document.getElementById('testStep').classList.add('hidden')
+                document.getElementById('resultStep').classList.remove('hidden')
+                document.getElementById('scoreBig').textContent = score
+                document.getElementById('scoreTotal').textContent = '/ ' + total
+                document.getElementById('scorePct').textContent = percentage + '%'
+
+                let emoji = 'Yaxshi'
+                let title = 'Ajoyib natija!'
+                let msg = "Natijangiz yuqorida ko'rsatilgan."
+                if (endedByPolicy) {
+                    emoji = 'Diqqat'
+                    title = 'Test avtomatik yakunlandi'
+                    msg = reason || 'Qoidabuzarlik limiti oshdi.'
+                } else if (timedOut) {
+                    emoji = 'Vaqt'
+                    title = 'Vaqt tugadi'
+                    msg = 'Belgilangan vaqt yakunlandi.'
+                } else if (percentage < 50) {
+                    emoji = 'Past'
+                    title = 'Ko\'proq mashq qiling!'
+                } else if (percentage < 70) {
+                    emoji = 'Yaxshi'
+                    title = "Yaxshi, lekin yaxshiroq bo'lishi mumkin!"
+                } else if (percentage < 90) {
+                    emoji = 'Zo\'r'
+                    title = 'Zo\'r natija!'
+                } else {
+                    emoji = 'A\'lo'
+                    title = 'Mukammal!'
+                }
+                document.getElementById('resultEmoji').textContent = emoji
+                document.getElementById('resultTitle').textContent = title
+                document.getElementById('resultMsg').textContent = msg
+            }
+
+            function isTestActive() {
+                return attemptId && !testFinished && !document.getElementById('testStep').classList.contains('hidden')
+            }
+
+            function showSecurityAlert(message, level) {
+                const el = document.getElementById('securityAlert')
+                el.textContent = message
+                el.className = `security-alert ${level || 'warn'}`
+                if (securityAlertTimeout) clearTimeout(securityAlertTimeout)
+                securityAlertTimeout = setTimeout(() => {
+                    el.classList.add('hidden')
+                }, 4500)
+            }
+
+            function showFocusWarningModal(message) {
+                focusWarningText.textContent =
+                    message || "Siz test oynasidan chiqdingiz. Yana bir marta chiqilsa test avtomatik yakunlanadi."
+                focusWarningModal.classList.remove('hidden')
+            }
+
+            function hideFocusWarningModal() {
+                focusWarningModal.classList.add('hidden')
+            }
+
+            function shouldThrottleFocusLoss() {
+                const now = Date.now()
+                if (now - lastFocusLossAt < 1500) return true
+                lastFocusLossAt = now
+                return false
+            }
+
+            async function reportSecurityEvent(eventType, details) {
+                if (!isTestActive()) return null
+                try {
+                    const res = await fetch('/api/test/event', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attemptId, attemptToken, eventType, details: details || '' }),
+                    })
+                    const data = await res.json()
+                    if (!data.success || !data.data) return null
+                    if (Number.isInteger(data.data.tabSwitchCount)) tabSwitchCount = data.data.tabSwitchCount
+                    if (Number.isInteger(data.data.maxAllowed) && data.data.maxAllowed > 0) tabSwitchMaxAllowed = data.data.maxAllowed
+                    if (data.data.autoFinished && data.data.result) {
+                        showSecurityAlert(data.data.result.reason || 'Qoidabuzarlik limiti oshdi. Test yakunlandi.', 'error')
+                        showResult(data.data.result)
+                    }
+                    return data.data
+                } catch {
+                    return null
+                }
+            }
+
+            async function sendHeartbeat() {
+                if (!isKioskClient || !isTestActive()) return true
+                try {
+                    const res = await fetch('/api/test/heartbeat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attemptId, attemptToken }),
+                    })
+                    const data = await res.json()
+                    if (!data.success) return false
+                    heartbeatFailCount = 0
+                    return true
+                } catch {
+                    return false
+                }
+            }
+
+            function stopHeartbeat() {
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval)
+                    heartbeatInterval = null
+                }
+            }
+
+            function startHeartbeat() {
+                stopHeartbeat()
+                heartbeatFailCount = 0
+                if (!isKioskClient) return
+                sendHeartbeat().catch(() => {})
+
+                heartbeatInterval = setInterval(async () => {
+                    if (!isTestActive()) return
+                    const ok = await sendHeartbeat()
+                    if (ok) return
+
+                    heartbeatFailCount += 1
+                    if (heartbeatFailCount >= heartbeatFailLimit) {
+                        showSecurityAlert("Server bilan aloqa uzildi. Test xavfsizlik uchun yakunlanadi.", 'error')
+                        await forceFinishByPolicy('kiosk_heartbeat_lost', 'heartbeat-failed')
+                    }
+                }, heartbeatIntervalMs)
+            }
+
+            async function forceFinishByPolicy(reason, details) {
+                if (!isTestActive()) return
+                stopHeartbeat()
+                try {
+                    const res = await fetch('/api/test/force-finish', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            attemptId,
+                            attemptToken,
+                            reason: reason || 'kiosk_policy',
+                            details: details || '',
+                        }),
+                    })
+                    const data = await res.json()
+                    if (data.success && data.data) {
+                        showResult(data.data)
+                        return
+                    }
+                } catch {
+                    // fall through
+                }
+                submitTest({ force: true, skipConfirm: true })
+            }
+
+            function registerFocusLoss(source) {
+                if (!isTestActive()) return
+                if (shouldThrottleFocusLoss()) return
+
+                const eventType = isKioskClient ? 'kiosk_focus_lost' : 'tab_hidden'
+                const eventDetails = `${isKioskClient ? 'kiosk' : 'web'}-${source}`
+
+                reportSecurityEvent(eventType, eventDetails).then(async (payload) => {
+                    if (!isTestActive()) return
+                    if (payload && payload.autoFinished) return
+
+                    let count = Number.isInteger(payload && payload.tabSwitchCount) ? payload.tabSwitchCount : null
+                    if (!Number.isInteger(count)) {
+                        count = tabSwitchCount + 1
+                        tabSwitchCount = count
+                    }
+
+                    const remaining = Math.max(0, tabSwitchMaxAllowed - count)
+                    if (count === 1 && remaining >= 1) {
+                        showFocusWarningModal("Siz test oynasidan birinchi marta chiqdingiz. 2-marta chiqilsa test avtomatik yakunlanadi.")
+                        return
+                    }
+
+                    if (remaining > 0) {
+                        showSecurityAlert(`Diqqat: yana ${remaining} ta imkon qoldi.`, 'warn')
+                        return
+                    }
+
+                    showSecurityAlert('Tab/fokus limiti tugadi. Test yakunlanadi.', 'error')
+                    if (isKioskClient) {
+                        await forceFinishByPolicy('kiosk_focus_lost', source)
+                    } else {
+                        submitTest({ force: true, skipConfirm: true })
+                    }
+                })
+            }
+
+            function handleVisibilityChange() {
+                if (!isTestActive() || !document.hidden) return
+                registerFocusLoss('visibility-hidden')
+            }
+
+            function handleWindowBlur() {
+                if (!isTestActive()) return
+                const now = Date.now()
+                if (now - lastBlurAt < 1200) return
+                lastBlurAt = now
+                if (isKioskClient) {
+                    registerFocusLoss('window-blur')
+                    return
+                }
+                reportSecurityEvent('window_blur', 'window_blur')
+            }
+
+            function handleCopyCut(e) {
+                if (!isTestActive()) return
+                e.preventDefault()
+                showSecurityAlert('Nusxa olish bloklandi.', 'warn')
+                reportSecurityEvent('copy_block', e.type)
+            }
+
+            function handleContextMenu(e) {
+                if (!isTestActive()) return
+                e.preventDefault()
+                showSecurityAlert("O'ng tugma menyusi bloklandi.", 'warn')
+                reportSecurityEvent('contextmenu_block', 'contextmenu')
+            }
+
+            function isEditableTarget(target) {
+                if (!target) return false
+                if (target.isContentEditable) return true
+                const tag = String(target.tagName || '').toLowerCase()
+                return tag === 'input' || tag === 'textarea'
+            }
+
+            function handleShortcutBlock(e) {
+                if (!isTestActive()) return
+                const key = String(e.key || '').toLowerCase()
+
+                if (e.key === 'PrintScreen') {
+                    e.preventDefault()
+                    showSecurityAlert('PrintScreen urinishi loglandi.', 'warn')
+                    reportSecurityEvent('printscreen_block', 'printscreen')
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText('').catch(() => {})
+                    }
+                    return
+                }
+
+                if (!(e.ctrlKey || e.metaKey)) return
+                if (!BLOCKED_SHORTCUTS.has(key)) return
+                if (isEditableTarget(e.target) && (key === 'a' || key === 'c' || key === 'x')) return
+
+                e.preventDefault()
+                showSecurityAlert('Ushbu klaviatura kombinatsiyasi bloklandi.', 'warn')
+                reportSecurityEvent('shortcut_block', `ctrl/meta+${key}`)
+            }
+
+            function setupAntiCheatGuards() {
+                if (antiCheatEnabled) return
+                antiCheatEnabled = true
+                document.body.classList.add('exam-protected')
+                document.addEventListener('visibilitychange', handleVisibilityChange)
+                window.addEventListener('blur', handleWindowBlur)
+                document.addEventListener('copy', handleCopyCut, true)
+                document.addEventListener('cut', handleCopyCut, true)
+                document.addEventListener('contextmenu', handleContextMenu, true)
+                document.addEventListener('keydown', handleShortcutBlock, true)
+            }
+
+            function teardownAntiCheatGuards() {
+                if (!antiCheatEnabled) return
+                antiCheatEnabled = false
+                document.body.classList.remove('exam-protected')
+                document.removeEventListener('visibilitychange', handleVisibilityChange)
+                window.removeEventListener('blur', handleWindowBlur)
+                document.removeEventListener('copy', handleCopyCut, true)
+                document.removeEventListener('cut', handleCopyCut, true)
+                document.removeEventListener('contextmenu', handleContextMenu, true)
+                document.removeEventListener('keydown', handleShortcutBlock, true)
+            }
+
+            function renderWatermark() {
+                const wm = document.getElementById('examWatermark')
+                if (!activeStudent) {
+                    wm.classList.add('hidden')
+                    wm.innerHTML = ''
+                    return
+                }
+                const stamp = formatDateTime(new Date())
+                const label = `${activeStudent.full_name} | ${activeStudent.email} | ${stamp}`
+                const lines = []
+                for (let i = 0; i < 8; i++) {
+                    const top = 6 + i * 12
+                    lines.push(`<div class="exam-watermark-line" style="top:${top}%">${escapeHtml(label)}</div>`)
+                }
+                wm.innerHTML = lines.join('')
+                wm.classList.remove('hidden')
+            }
+
+            function startWatermark() {
+                stopWatermark()
+                renderWatermark()
+                watermarkInterval = setInterval(renderWatermark, 30000)
+            }
+
+            function stopWatermark() {
+                if (watermarkInterval) {
+                    clearInterval(watermarkInterval)
+                    watermarkInterval = null
+                }
+                const wm = document.getElementById('examWatermark')
+                wm.innerHTML = ''
+                wm.classList.add('hidden')
+            }
+
+            function formatDateTime(value) {
+                try {
+                    return new Intl.DateTimeFormat('uz-UZ', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false,
+                    }).format(value)
+                } catch {
+                    return String(value)
+                }
+            }
+
+            function setupKioskBridgeListeners() {
+                if (!window.kioskBridge || typeof window.kioskBridge.onHostPolicyFinish !== 'function') return
+                if (setupKioskBridgeListeners.bound) return
+                setupKioskBridgeListeners.bound = true
+
+                window.kioskBridge.onHostPolicyFinish(async (payload) => {
+                    if (!isTestActive()) return
+                    const reason = payload && payload.reason ? payload.reason : 'kiosk_host_force_finish'
+                    const details = payload && payload.details ? payload.details : 'host-policy-finish'
+                    await forceFinishByPolicy(reason, details)
+                })
+            }
+            setupKioskBridgeListeners.bound = false
+            setupKioskBridgeListeners()
+
+            function escapeHtml(str) {
+                return String(str || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+            }
+
+            window.addEventListener('beforeunload', (e) => {
+                if (isTestActive()) {
+                    if (isKioskClient) {
+                        reportSecurityEvent('kiosk_app_closed', 'beforeunload')
+                        return
+                    }
+                    e.preventDefault()
+                    e.returnValue = ''
+                }
+            })
+        </script>
+    </body>
+</html>
+

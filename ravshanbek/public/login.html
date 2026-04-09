@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="uz">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Admin Login — Simsiz tarmoqlar olimpiadasi</title>
+        <link rel="stylesheet" href="/style.css" />
+    </head>
+    <body class="center-page">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="badge">🔐 Admin panel</div>
+                <h2>Tashkilotchi kirishi</h2>
+                <p class="muted">Ma'lumotlarni ko'rish uchun tizimga kiring</p>
+            </div>
+
+            <form id="loginForm" class="form">
+                <div class="field">
+                    <label for="username">Login</label>
+                    <input type="text" id="username" name="username" required autofocus />
+                </div>
+                <div class="field">
+                    <label for="password">Parol</label>
+                    <input type="password" id="password" name="password" required />
+                </div>
+                <button type="submit" class="btn btn-primary">Kirish</button>
+                <div id="loginMsg" class="message hidden"></div>
+            </form>
+
+            <div class="login-footer">
+                <a href="/">← Bosh sahifaga qaytish</a>
+            </div>
+        </div>
+
+        <script>
+            document.getElementById('loginForm').addEventListener('submit', async (e) => {
+                e.preventDefault()
+                const username = document.getElementById('username').value
+                const password = document.getElementById('password').value
+                const msg = document.getElementById('loginMsg')
+                try {
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        window.location.href = '/admin.html'
+                    } else {
+                        msg.textContent = data.message || 'Xatolik'
+                        msg.className = 'message error'
+                    }
+                } catch (err) {
+                    msg.textContent = 'Server xatosi'
+                    msg.className = 'message error'
+                }
+            })
+        </script>
+    </body>
+</html>

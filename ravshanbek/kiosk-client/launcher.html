@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="uz">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Kiosk Test Launcher</title>
+        <style>
+            :root {
+                --bg1: #0f172a;
+                --bg2: #1e293b;
+                --card: #ffffff;
+                --text: #0f172a;
+                --muted: #64748b;
+                --accent: #0ea5e9;
+                --accent-dark: #0284c7;
+                --danger: #dc2626;
+            }
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                min-height: 100vh;
+                display: grid;
+                place-items: center;
+                font-family: 'Segoe UI', Tahoma, sans-serif;
+                background: linear-gradient(135deg, var(--bg1), var(--bg2));
+                padding: 24px;
+            }
+            .card {
+                width: min(520px, 96vw);
+                background: var(--card);
+                border-radius: 16px;
+                box-shadow: 0 24px 50px rgba(0, 0, 0, 0.3);
+                padding: 28px;
+            }
+            h1 {
+                font-size: 24px;
+                margin-bottom: 8px;
+            }
+            .muted {
+                color: var(--muted);
+                margin-bottom: 20px;
+            }
+            .field {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin-bottom: 14px;
+            }
+            .field label {
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text);
+            }
+            .field input {
+                border: 1.5px solid #cbd5e1;
+                border-radius: 10px;
+                padding: 11px 12px;
+                font-size: 15px;
+            }
+            .field input:focus {
+                outline: none;
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+            }
+            .btn {
+                width: 100%;
+                border: none;
+                border-radius: 10px;
+                padding: 12px 14px;
+                font-size: 15px;
+                font-weight: 700;
+                color: #fff;
+                background: var(--accent);
+                cursor: pointer;
+            }
+            .btn:hover {
+                background: var(--accent-dark);
+            }
+            .msg {
+                margin-top: 12px;
+                font-size: 13px;
+                min-height: 20px;
+            }
+            .msg.error {
+                color: var(--danger);
+            }
+            .status {
+                margin-top: 18px;
+                padding: 10px 12px;
+                border-radius: 10px;
+                background: #f1f5f9;
+                color: #334155;
+                font-size: 12px;
+            }
+        </style>
+    </head>
+    <body>
+        <main class="card">
+            <h1>Kiosk Test Launcher</h1>
+            <p class="muted">Faqat test uchun xavfsiz EXE rejim.</p>
+
+            <form id="launchForm">
+                <div class="field">
+                    <label for="serverUrl">Server URL</label>
+                    <input id="serverUrl" type="url" required placeholder="http://localhost:3000" />
+                </div>
+                <div class="field">
+                    <label for="email">Talaba email</label>
+                    <input id="email" type="email" required placeholder="talaba@email.com" />
+                </div>
+                <button id="startBtn" class="btn" type="submit">Xavfsiz testni boshlash</button>
+                <div id="msg" class="msg"></div>
+            </form>
+
+            <div id="runtime" class="status">Kiosk client yuklanmoqda...</div>
+        </main>
+
+        <script>
+            const form = document.getElementById('launchForm')
+            const startBtn = document.getElementById('startBtn')
+            const serverInput = document.getElementById('serverUrl')
+            const emailInput = document.getElementById('email')
+            const msg = document.getElementById('msg')
+            const runtime = document.getElementById('runtime')
+
+            const savedServer = localStorage.getItem('kiosk_server_url')
+            const savedEmail = localStorage.getItem('kiosk_last_email')
+            serverInput.value = savedServer || 'http://localhost:3000'
+            emailInput.value = savedEmail || ''
+
+            if (!window.kioskBridge || !window.kioskBridge.isKiosk) {
+                runtime.textContent = "Xato: Kiosk bridge topilmadi. Faqat EXE ichida ishlaydi."
+                runtime.style.color = '#dc2626'
+            } else {
+                window.kioskBridge.getRuntime().then((r) => {
+                    runtime.textContent = `Platforma: ${r.platform} | Versiya: ${r.appVersion}`
+                })
+            }
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault()
+                msg.textContent = ''
+                msg.className = 'msg'
+
+                const serverUrl = serverInput.value.trim()
+                const email = emailInput.value.trim()
+                if (!serverUrl || !email) return
+
+                startBtn.disabled = true
+                startBtn.textContent = 'Yuklanmoqda...'
+                localStorage.setItem('kiosk_server_url', serverUrl)
+                localStorage.setItem('kiosk_last_email', email)
+
+                try {
+                    const result = await window.kioskBridge.startSession({ serverUrl, email })
+                    if (!result.success) {
+                        msg.textContent = result.message || "Ishga tushirib bo'lmadi"
+                        msg.className = 'msg error'
+                    }
+                } catch (err) {
+                    msg.textContent = String(err && err.message ? err.message : err)
+                    msg.className = 'msg error'
+                } finally {
+                    startBtn.disabled = false
+                    startBtn.textContent = 'Xavfsiz testni boshlash'
+                }
+            })
+        </script>
+    </body>
+</html>

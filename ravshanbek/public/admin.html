@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="uz">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Admin Panel — Simsiz tarmoqlar olimpiadasi</title>
+        <link rel="stylesheet" href="/style.css" />
+    </head>
+    <body>
+        <div class="admin-layout">
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <div class="logo">📡</div>
+                    <h3>Olimpiada</h3>
+                    <small>Admin panel</small>
+                </div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-view="students">👥 Talabalar</button>
+                    <button class="nav-item" data-view="questions">📝 Savollar</button>
+                    <button class="nav-item" data-view="results">🏆 Natijalar</button>
+                </nav>
+                <button id="logoutBtn" class="btn btn-ghost">🚪 Chiqish</button>
+            </aside>
+
+            <main class="admin-main">
+                <!-- ===== STUDENTS VIEW ===== -->
+                <section id="view-students" class="view-section active">
+                    <header class="admin-header">
+                        <div>
+                            <h1>Ro'yxatdan o'tgan talabalar</h1>
+                            <p class="muted">Barcha ro'yxatdan o'tgan ishtirokchilar</p>
+                        </div>
+                        <div class="header-actions">
+                            <button id="exportExcel" class="btn btn-success">📊 Excel</button>
+                            <button id="exportWord" class="btn btn-primary">📄 Word</button>
+                        </div>
+                    </header>
+
+                    <div class="stats">
+                        <div class="stat-card"><div class="stat-value" id="totalCount">0</div><div class="stat-label">Jami talabalar</div></div>
+                        <div class="stat-card"><div class="stat-value" id="todayCount">0</div><div class="stat-label">Bugun qo'shildi</div></div>
+                        <div class="stat-card"><div class="stat-value" id="directionsCount">0</div><div class="stat-label">Yo'nalishlar</div></div>
+                    </div>
+
+                    <div class="toolbar">
+                        <input type="text" id="search" placeholder="🔍 Qidirish..." class="search-input" />
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>#</th><th>F.I.Sh</th><th>Yo'nalish</th><th>Kurs</th><th>Email</th><th>Telefon</th><th>Sana</th><th>Amal</th></tr>
+                            </thead>
+                            <tbody id="studentsTable"><tr><td colspan="8" class="loading">Yuklanmoqda...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ===== QUESTIONS VIEW ===== -->
+                <section id="view-questions" class="view-section">
+                    <header class="admin-header">
+                        <div>
+                            <h1>Test savollari</h1>
+                            <p class="muted">Olimpiada test savollarini boshqaring</p>
+                        </div>
+                        <div class="header-actions">
+                            <button id="downloadTemplate" class="btn btn-ghost">📋 Shablon</button>
+                            <label class="btn btn-success" style="cursor: pointer">
+                                📤 Excel import
+                                <input type="file" id="importFile" accept=".xlsx" style="display: none" />
+                            </label>
+                            <button id="addQuestionBtn" class="btn btn-primary">➕ Yangi savol</button>
+                        </div>
+                    </header>
+
+                    <div class="stats">
+                        <div class="stat-card"><div class="stat-value" id="questionsCount">0</div><div class="stat-label">Jami savollar</div></div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>#</th><th>Savol</th><th>Turi</th><th>Tavsif</th><th>Amal</th></tr>
+                            </thead>
+                            <tbody id="questionsTable"><tr><td colspan="5" class="loading">Yuklanmoqda...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- ===== RESULTS VIEW ===== -->
+                <section id="view-results" class="view-section">
+                    <header class="admin-header">
+                        <div>
+                            <h1>Test natijalari</h1>
+                            <p class="muted">Testni topshirgan talabalar va ularning ballari</p>
+                        </div>
+                        <div class="header-actions">
+                            <button id="exportResults" class="btn btn-success">📊 Excel eksport</button>
+                        </div>
+                    </header>
+
+                    <div class="stats">
+                        <div class="stat-card"><div class="stat-value" id="totalAttempts">0</div><div class="stat-label">Jami urinishlar</div></div>
+                        <div class="stat-card"><div class="stat-value" id="completedAttempts">0</div><div class="stat-label">Yakunlangan</div></div>
+                        <div class="stat-card"><div class="stat-value" id="avgScore">0%</div><div class="stat-label">O'rtacha ball</div></div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>#</th><th>F.I.Sh</th><th>Yo'nalish</th><th>Kurs</th><th>Email</th><th>Ball</th><th>%</th><th>Rejim</th><th>Tab</th><th>Sabab</th><th>Tugatgan</th></tr>
+                            </thead>
+                            <tbody id="resultsTable"><tr><td colspan="11" class="loading">Yuklanmoqda...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- ===== QUESTION MODAL ===== -->
+        <div id="questionModal" class="modal-overlay hidden">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="modalTitle">Yangi savol</h3>
+                    <button class="modal-close" onclick="closeModal()">×</button>
+                </div>
+                <form id="questionForm" class="form">
+                    <input type="hidden" id="qId" />
+                    <div class="field">
+                        <label>Savol matni</label>
+                        <input type="text" id="qText" required />
+                    </div>
+                    <div class="field">
+                        <label>Savol turi</label>
+                        <select id="qType" required>
+                            <option value="single_choice">Bitta javobli test</option>
+                            <option value="multiple_choice">Bir nechta javobli test</option>
+                            <option value="text_input">Matnli javob</option>
+                            <option value="matching">Moslashtirish</option>
+                        </select>
+                    </div>
+
+                    <div id="choiceFields">
+                        <div class="row">
+                            <div class="field"><label>A varianti</label><input type="text" id="qA" /></div>
+                            <div class="field"><label>B varianti</label><input type="text" id="qB" /></div>
+                        </div>
+                        <div class="row">
+                            <div class="field"><label>C varianti</label><input type="text" id="qC" /></div>
+                            <div class="field"><label>D varianti</label><input type="text" id="qD" /></div>
+                        </div>
+                    </div>
+
+                    <div class="field" id="singleAnswerField">
+                        <label>To'g'ri javob (1 ta)</label>
+                        <div class="radio-group" id="correctGroup">
+                            <div class="radio-btn" data-value="A">A</div>
+                            <div class="radio-btn" data-value="B">B</div>
+                            <div class="radio-btn" data-value="C">C</div>
+                            <div class="radio-btn" data-value="D">D</div>
+                        </div>
+                        <input type="hidden" id="qCorrectSingle" />
+                    </div>
+
+                    <div class="field hidden" id="multiAnswerField">
+                        <label>To'g'ri javoblar (bir nechta tanlash mumkin)</label>
+                        <div class="row">
+                            <label><input type="checkbox" id="qMultiA" value="A" /> A</label>
+                            <label><input type="checkbox" id="qMultiB" value="B" /> B</label>
+                            <label><input type="checkbox" id="qMultiC" value="C" /> C</label>
+                            <label><input type="checkbox" id="qMultiD" value="D" /> D</label>
+                        </div>
+                    </div>
+
+                    <div class="field hidden" id="textAnswerField">
+                        <label>Qabul qilinadigan javoblar (har qatorda bitta)</label>
+                        <textarea id="qAcceptedAnswers" rows="5" placeholder="Masalan:&#10;802.11&#10;IEEE 802.11"></textarea>
+                    </div>
+
+                    <div class="field hidden" id="matchingField">
+                        <label>Moslashtirish juftliklari (har qatorda: chap | o'ng)</label>
+                        <textarea id="qMatchingPairs" rows="6" placeholder="Wi-Fi | 802.11&#10;Bluetooth | 2.4 GHz"></textarea>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-ghost" onclick="closeModal()">Bekor</button>
+                        <button type="submit" class="btn btn-primary">Saqlash</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            // ===== NAVIGATION =====
+            document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'))
+                    document.querySelectorAll('.view-section').forEach((s) => s.classList.remove('active'))
+                    btn.classList.add('active')
+                    const view = btn.dataset.view
+                    document.getElementById('view-' + view).classList.add('active')
+                    if (view === 'students') loadStudents()
+                    if (view === 'questions') loadQuestions()
+                    if (view === 'results') loadResults()
+                })
+            })
+
+            function escapeHtml(str) {
+                return String(str || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+            }
+
+            // ===== STUDENTS =====
+            let allStudents = []
+            async function loadStudents() {
+                const res = await fetch('/api/students')
+                if (res.status === 401) return (window.location.href = '/login.html')
+                const data = await res.json()
+                allStudents = data.data || []
+                renderStudents(allStudents)
+                document.getElementById('totalCount').textContent = allStudents.length
+                const today = new Date().toISOString().slice(0, 10)
+                document.getElementById('todayCount').textContent = allStudents.filter((s) => (s.created_at || '').startsWith(today)).length
+                document.getElementById('directionsCount').textContent = new Set(allStudents.map((s) => s.direction)).size
+            }
+
+            function renderStudents(students) {
+                const tbody = document.getElementById('studentsTable')
+                if (students.length === 0) return (tbody.innerHTML = '<tr><td colspan="8" class="loading">Hali ro\'yxatdan o\'tganlar yo\'q</td></tr>')
+                tbody.innerHTML = students
+                    .map((s, i) => `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td><strong>${escapeHtml(s.full_name)}</strong></td>
+                            <td>${escapeHtml(s.direction)}</td>
+                            <td><span class="tag">${escapeHtml(s.course)}</span></td>
+                            <td><a href="mailto:${escapeHtml(s.email)}">${escapeHtml(s.email)}</a></td>
+                            <td>${escapeHtml(s.phone)}</td>
+                            <td class="muted">${escapeHtml(s.created_at)}</td>
+                            <td><button class="btn-icon" onclick="deleteStudent(${s.id})">🗑️</button></td>
+                        </tr>`)
+                    .join('')
+            }
+
+            async function deleteStudent(id) {
+                if (!confirm("O'chirishni tasdiqlaysizmi?")) return
+                await fetch('/api/students/' + id, { method: 'DELETE' })
+                loadStudents()
+            }
+
+            document.getElementById('search').addEventListener('input', (e) => {
+                const q = e.target.value.toLowerCase()
+                renderStudents(allStudents.filter((s) => [s.full_name, s.email, s.direction, s.phone, s.course].some((v) => (v || '').toLowerCase().includes(q))))
+            })
+
+            document.getElementById('exportExcel').addEventListener('click', () => (window.location.href = '/api/export/excel'))
+            document.getElementById('exportWord').addEventListener('click', () => (window.location.href = '/api/export/word'))
+            // ===== QUESTIONS =====
+            const QUESTION_TYPE_LABELS = {
+                single_choice: "Bitta javobli",
+                multiple_choice: "Bir nechta javobli",
+                text_input: 'Matnli javob',
+                matching: 'Moslashtirish',
+            }
+
+            let allQuestions = []
+
+            function getQuestionTypeLabel(type) {
+                return QUESTION_TYPE_LABELS[type] || type
+            }
+
+            function getQuestionSummary(q) {
+                if (q.question_type === 'single_choice') {
+                    return `To'g'ri: ${q.correct_option || '-'}`
+                }
+                if (q.question_type === 'multiple_choice') {
+                    return `To'g'rilar: ${(q.correct_options || []).join(', ') || '-'}`
+                }
+                if (q.question_type === 'text_input') {
+                    return `Variantlar: ${(q.accepted_answers || []).slice(0, 2).join(', ') || '-'}`
+                }
+                return `Juftliklar: ${(q.matching_pairs || []).length}`
+            }
+
+            function toggleQuestionFields(type) {
+                const isChoice = type === 'single_choice' || type === 'multiple_choice'
+                const isSingle = type === 'single_choice'
+                const isMultiple = type === 'multiple_choice'
+                const isText = type === 'text_input'
+                const isMatching = type === 'matching'
+
+                document.getElementById('choiceFields').classList.toggle('hidden', !isChoice)
+                document.getElementById('singleAnswerField').classList.toggle('hidden', !isSingle)
+                document.getElementById('multiAnswerField').classList.toggle('hidden', !isMultiple)
+                document.getElementById('textAnswerField').classList.toggle('hidden', !isText)
+                document.getElementById('matchingField').classList.toggle('hidden', !isMatching)
+
+                ;['qA', 'qB', 'qC', 'qD'].forEach((id) => {
+                    document.getElementById(id).required = isChoice
+                })
+                document.getElementById('qAcceptedAnswers').required = isText
+                document.getElementById('qMatchingPairs').required = isMatching
+            }
+
+            async function loadQuestions() {
+                const res = await fetch('/api/admin/questions')
+                if (res.status === 401) return (window.location.href = '/login.html')
+                const data = await res.json()
+                allQuestions = data.data || []
+                document.getElementById('questionsCount').textContent = allQuestions.length
+                const tbody = document.getElementById('questionsTable')
+                if (allQuestions.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">Hali savollar yo\'q. "Yangi savol" yoki "Excel import" orqali qo\'shing.</td></tr>'
+                    return
+                }
+                tbody.innerHTML = allQuestions
+                    .map((q, i) => `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td style="max-width:360px">${escapeHtml(q.text)}</td>
+                            <td><span class="tag">${escapeHtml(getQuestionTypeLabel(q.question_type))}</span></td>
+                            <td style="max-width:260px">${escapeHtml(getQuestionSummary(q))}</td>
+                            <td>
+                                <button class="btn-icon" data-action="edit-question" data-id="${q.id}">Tahrir</button>
+                                <button class="btn-icon" data-action="delete-question" data-id="${q.id}">O'chir</button>
+                            </td>
+                        </tr>`)
+                    .join('')
+            }
+
+            function openQuestionModal(q = null) {
+                document.getElementById('modalTitle').textContent = q ? 'Savolni tahrirlash' : 'Yangi savol'
+                document.getElementById('qId').value = q ? q.id : ''
+                document.getElementById('qText').value = q ? q.text : ''
+                document.getElementById('qType').value = q ? q.question_type : 'single_choice'
+                document.getElementById('qA').value = q ? q.option_a || '' : ''
+                document.getElementById('qB').value = q ? q.option_b || '' : ''
+                document.getElementById('qC').value = q ? q.option_c || '' : ''
+                document.getElementById('qD').value = q ? q.option_d || '' : ''
+                document.getElementById('qCorrectSingle').value = q ? q.correct_option || '' : ''
+                document.querySelectorAll('.radio-btn').forEach((b) => b.classList.toggle('active', q && b.dataset.value === (q.correct_option || '')))
+
+                ;['A', 'B', 'C', 'D'].forEach((letter) => {
+                    document.getElementById('qMulti' + letter).checked = q ? (q.correct_options || []).includes(letter) : false
+                })
+
+                document.getElementById('qAcceptedAnswers').value = q && Array.isArray(q.accepted_answers) ? q.accepted_answers.join('\n') : ''
+                document.getElementById('qMatchingPairs').value =
+                    q && Array.isArray(q.matching_pairs)
+                        ? q.matching_pairs.map((p) => `${p.left} | ${p.right}`).join('\n')
+                        : ''
+
+                toggleQuestionFields(document.getElementById('qType').value)
+                document.getElementById('questionModal').classList.remove('hidden')
+            }
+
+            function closeModal() { document.getElementById('questionModal').classList.add('hidden') }
+
+            async function deleteQuestion(id) {
+                if (!confirm("Savolni o'chirishni tasdiqlaysizmi?")) return
+                await fetch('/api/admin/questions/' + id, { method: 'DELETE' })
+                loadQuestions()
+            }
+
+            document.getElementById('questionsTable').addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-action]')
+                if (!btn) return
+                const id = Number(btn.dataset.id)
+                if (!Number.isInteger(id) || id <= 0) return
+
+                if (btn.dataset.action === 'edit-question') {
+                    const question = allQuestions.find((q) => q.id === id)
+                    if (question) openQuestionModal(question)
+                } else if (btn.dataset.action === 'delete-question') {
+                    deleteQuestion(id)
+                }
+            })
+
+            document.querySelectorAll('.radio-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.radio-btn').forEach((b) => b.classList.remove('active'))
+                    btn.classList.add('active')
+                    document.getElementById('qCorrectSingle').value = btn.dataset.value
+                })
+            })
+
+            document.getElementById('qType').addEventListener('change', (e) => {
+                toggleQuestionFields(e.target.value)
+            })
+
+            document.getElementById('addQuestionBtn').addEventListener('click', () => openQuestionModal())
+
+            document.getElementById('questionForm').addEventListener('submit', async (e) => {
+                e.preventDefault()
+                const id = document.getElementById('qId').value
+                const payload = {
+                    text: document.getElementById('qText').value,
+                    question_type: document.getElementById('qType').value,
+                }
+
+                if (payload.question_type === 'single_choice' || payload.question_type === 'multiple_choice') {
+                    payload.option_a = document.getElementById('qA').value
+                    payload.option_b = document.getElementById('qB').value
+                    payload.option_c = document.getElementById('qC').value
+                    payload.option_d = document.getElementById('qD').value
+                }
+
+                if (payload.question_type === 'single_choice') {
+                    payload.correct_option = document.getElementById('qCorrectSingle').value
+                    if (!payload.correct_option) return alert("To'g'ri javobni tanlang")
+                } else if (payload.question_type === 'multiple_choice') {
+                    payload.correct_options = ['A', 'B', 'C', 'D'].filter((letter) => document.getElementById('qMulti' + letter).checked)
+                    if (!payload.correct_options.length) return alert("Kamida bitta to'g'ri javobni tanlang")
+                } else if (payload.question_type === 'text_input') {
+                    payload.accepted_answers = document
+                        .getElementById('qAcceptedAnswers')
+                        .value.split(/\r?\n/)
+                        .map((x) => x.trim())
+                        .filter(Boolean)
+                    if (!payload.accepted_answers.length) return alert("Kamida bitta to'g'ri javob matnini kiriting")
+                } else if (payload.question_type === 'matching') {
+                    payload.matching_pairs = document
+                        .getElementById('qMatchingPairs')
+                        .value.split(/\r?\n/)
+                        .map((line) => line.trim())
+                        .filter(Boolean)
+                        .map((line) => {
+                            const [left, ...rest] = line.split('|')
+                            return { left: (left || '').trim(), right: rest.join('|').trim() }
+                        })
+                        .filter((p) => p.left && p.right)
+
+                    if (payload.matching_pairs.length < 2) {
+                        return alert("Moslashtirish uchun kamida 2 ta juftlik kiriting (masalan: Wi-Fi | 802.11)")
+                    }
+                }
+
+                const url = id ? '/api/admin/questions/' + id : '/api/admin/questions'
+                const method = id ? 'PUT' : 'POST'
+                const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                const data = await res.json()
+                if (data.success) {
+                    closeModal()
+                    loadQuestions()
+                } else {
+                    alert(data.message || 'Xatolik')
+                }
+            })
+
+            document.getElementById('downloadTemplate').addEventListener('click', () => (window.location.href = '/api/admin/questions/template'))
+
+            document.getElementById('importFile').addEventListener('change', async (e) => {
+                const file = e.target.files[0]
+                if (!file) return
+                const fd = new FormData()
+                fd.append('file', file)
+                const res = await fetch('/api/admin/questions/import', { method: 'POST', body: fd })
+                const data = await res.json()
+                alert(data.message || (data.success ? 'Muvaffaqiyatli' : 'Xatolik'))
+                e.target.value = ''
+                if (data.success) loadQuestions()
+            })
+            // ===== RESULTS =====
+            async function loadResults() {
+                const res = await fetch('/api/admin/results')
+                if (res.status === 401) return (window.location.href = '/login.html')
+                const data = await res.json()
+                const results = data.data || []
+
+                document.getElementById('totalAttempts').textContent = results.length
+                const completed = results.filter((r) => r.finished_at)
+                document.getElementById('completedAttempts').textContent = completed.length
+                const avg = completed.length ? Math.round(completed.reduce((a, r) => a + (r.total ? (r.score / r.total) * 100 : 0), 0) / completed.length) : 0
+                document.getElementById('avgScore').textContent = avg + '%'
+
+                const sorted = completed.slice().sort((a, b) => (b.score / b.total) - (a.score / a.total))
+
+                const tbody = document.getElementById('resultsTable')
+                if (sorted.length === 0) return (tbody.innerHTML = '<tr><td colspan="11" class="loading">Hali natijalar yo\'q</td></tr>')
+                tbody.innerHTML = sorted
+                    .map((r, i) => {
+                        const pct = r.total ? Math.round((r.score / r.total) * 100) : 0
+                        const winnerClass = i < 3 ? ` class="winner-${i + 1}"` : ''
+                        const medal = i === 0 ? 'рџҐ‡ ' : i === 1 ? 'рџҐ€ ' : i === 2 ? 'рџҐ‰ ' : ''
+                        const mode = r.client_mode || 'web'
+                        const tabSwitch = Number.isInteger(r.tab_switch_count) ? r.tab_switch_count : 0
+                        const endedReason = r.ended_reason || '-'
+                        return `
+                            <tr${winnerClass}>
+                                <td>${medal}${i + 1}</td>
+                                <td><strong>${escapeHtml(r.full_name)}</strong></td>
+                                <td>${escapeHtml(r.direction)}</td>
+                                <td><span class="tag">${escapeHtml(r.course)}</span></td>
+                                <td>${escapeHtml(r.email)}</td>
+                                <td><strong>${r.score}/${r.total}</strong></td>
+                                <td><strong style="color:var(--primary)">${pct}%</strong></td>
+                                <td><span class="tag">${escapeHtml(mode)}</span></td>
+                                <td>${tabSwitch}</td>
+                                <td class="muted">${escapeHtml(endedReason)}</td>
+                                <td class="muted">${escapeHtml(r.finished_at || '-')}</td>
+                            </tr>`
+                    })
+                    .join('')
+            }
+
+            document.getElementById('exportResults').addEventListener('click', () => (window.location.href = '/api/admin/results/excel'))
+
+            // ===== LOGOUT =====
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                await fetch('/api/logout', { method: 'POST' })
+                window.location.href = '/login.html'
+            })
+
+            loadStudents()
+        </script>
+    </body>
+</html>
+
+
+
+
+

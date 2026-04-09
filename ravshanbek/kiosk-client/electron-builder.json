@@ -1,0 +1,33 @@
+{
+    "appId": "uz.ravshanbek.olimpiada.kiosk",
+    "productName": "Olimpiada Kiosk Test",
+    "directories": {
+        "output": "dist-kiosk"
+    },
+    "files": [
+        "kiosk-client/**/*",
+        "package.json"
+    ],
+    "extraMetadata": {
+        "main": "kiosk-client/main.js"
+    },
+    "asar": true,
+    "npmRebuild": false,
+    "win": {
+        "signAndEditExecutable": false,
+        "target": [
+            {
+                "target": "nsis",
+                "arch": [
+                    "x64"
+                ]
+            }
+        ],
+        "artifactName": "olimpiada-kiosk-${version}-setup.${ext}"
+    },
+    "nsis": {
+        "oneClick": false,
+        "allowToChangeInstallationDirectory": false,
+        "perMachine": true
+    }
+}
