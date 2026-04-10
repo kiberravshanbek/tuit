@@ -13,8 +13,8 @@ const PORT = process.env.PORT || 3000
 const IS_PROD = process.env.NODE_ENV === 'production'
 
 const ADMIN_USER = process.env.ADMIN_USER || 'admin'
-const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123'
-const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-only-session-secret-change-this-before-prod'
+const ADMIN_PASS = process.env.ADMIN_PASS || 'Ar$20020604Mat'
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-key-change-this-in-production-environments-now'
 
 const MIN_TEST_DURATION = 5
 const MAX_TEST_DURATION = 180
