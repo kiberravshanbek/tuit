@@ -1,1 +1,32 @@
-ravshanbek/dist-kiosk/
+# Dependencies
+node_modules/
+package-lock.json
+
+# SSH keys (NEVER commit these!)
+**/eval*
+*.ssh
+id_rsa*
+*.pem
+
+# Build outputs
+dist/
+dist-kiosk/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS and IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
