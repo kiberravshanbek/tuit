@@ -1,6 +1,6 @@
 const express = require('express')
 const session = require('express-session')
-const Database = require('better-sqlite3')
+const mongoose = require('mongoose')
 const ExcelJS = require('exceljs')
 const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType, AlignmentType } = require('docx')
 const path = require('path')
@@ -15,6 +15,7 @@ const IS_PROD = process.env.NODE_ENV === 'production'
 const ADMIN_USER = process.env.ADMIN_USER || 'admin'
 const ADMIN_PASS = process.env.ADMIN_PASS || 'Ar$20020604Mat'
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-key-change-this-in-production-environments-now'
+const MONGODB_URI = process.env.MONGODB_URI
 
 const MIN_TEST_DURATION = 5
 const MAX_TEST_DURATION = 180
@@ -123,143 +124,51 @@ if (IS_PROD) {
     if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
         throw new Error('SESSION_SECRET production muhitida kamida 32 belgidan iborat bo`lishi kerak.')
     }
-}
-
-if (ADMIN_USER === 'admin' || ADMIN_PASS === 'admin123') {
-    console.warn("WARNING: Default admin credentials ishlatilmoqda. Xavfsizlik uchun o`zgartiring.")
-}
-if (SESSION_SECRET.startsWith('dev-only-')) {
-    console.warn('WARNING: Default SESSION_SECRET ishlatilmoqda. Xavfsizlik uchun o`zgartiring.')
-}
-
-const EXCEL_MIME_TYPES = new Set([
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/octet-stream',
-])
-
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 2 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-        const ext = path.extname(String(file.originalname || '')).toLowerCase()
-        const mimeOk = EXCEL_MIME_TYPES.has(String(file.mimetype || '').toLowerCase())
-        if (ext !== '.xlsx' || !mimeOk) {
-            return cb(new Error('Faqat .xlsx formatdagi fayl yuklash mumkin.'))
-        }
-        return cb(null, true)
-    },
-})
-
-const resolvedDbPath = process.env.SQLITE_DB_PATH
-    ? path.resolve(String(process.env.SQLITE_DB_PATH))
-    : path.join(__dirname, 'olimpiada.db')
-fs.mkdirSync(path.dirname(resolvedDbPath), { recursive: true })
-const db = new Database(resolvedDbPath)
-db.exec(`
-    CREATE TABLE IF NOT EXISTS students (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT NOT NULL,
-        direction TEXT NOT NULL,
-        course TEXT NOT NULL,
-        email TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        created_at TEXT DEFAULT (datetime('now', 'localtime'))
-    );
-
-    CREATE TABLE IF NOT EXISTS questions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        text TEXT NOT NULL,
-        option_a TEXT NOT NULL,
-        option_b TEXT NOT NULL,
-        option_c TEXT NOT NULL,
-        option_d TEXT NOT NULL,
-        correct_option TEXT NOT NULL CHECK(correct_option IN ('A','B','C','D')),
-        created_at TEXT DEFAULT (datetime('now', 'localtime'))
-    );
-
-    CREATE TABLE IF NOT EXISTS question_bank (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        text TEXT NOT NULL,
-        question_type TEXT NOT NULL,
-        question_payload TEXT NOT NULL,
-        correct_answer_json TEXT NOT NULL,
-        created_at TEXT DEFAULT (datetime('now', 'localtime'))
-    );
-
-    CREATE TABLE IF NOT EXISTS test_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER NOT NULL,
-        score INTEGER,
-        total INTEGER,
-        answers_json TEXT,
-        question_order TEXT,
-        attempt_token_hash TEXT,
-        tab_switch_count INTEGER DEFAULT 0,
-        security_events_json TEXT,
-        client_mode TEXT,
-        last_heartbeat_at TEXT,
-        ended_reason TEXT,
-        started_at TEXT DEFAULT (datetime('now', 'localtime')),
-        finished_at TEXT,
-        FOREIGN KEY (student_id) REFERENCES students(id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_students_email_nocase ON students(email COLLATE NOCASE);
-    CREATE INDEX IF NOT EXISTS idx_test_results_student_id ON test_results(student_id);
-    CREATE INDEX IF NOT EXISTS idx_test_results_finished_at ON test_results(finished_at);
-    CREATE INDEX IF NOT EXISTS idx_question_bank_type ON question_bank(question_type);
-`)
-
-ensureColumnIfMissing('test_results', 'attempt_token_hash', 'TEXT')
-ensureColumnIfMissing('test_results', 'tab_switch_count', 'INTEGER DEFAULT 0')
-ensureColumnIfMissing('test_results', 'security_events_json', 'TEXT')
-ensureColumnIfMissing('test_results', 'client_mode', 'TEXT')
-ensureColumnIfMissing('test_results', 'last_heartbeat_at', 'TEXT')
-ensureColumnIfMissing('test_results', 'ended_reason', 'TEXT')
-migrateLegacyQuestionsToQuestionBank()
-
-function ensureColumnIfMissing(tableName, columnName, columnType) {
-    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all()
-    const exists = columns.some((c) => c.name === columnName)
-    if (!exists) {
-        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`)
+    if (!MONGODB_URI) {
+        throw new Error('MONGODB_URI production muhitida majburiy.')
     }
 }
 
-function migrateLegacyQuestionsToQuestionBank() {
-    const existing = db.prepare('SELECT COUNT(*) AS c FROM question_bank').get()
-    if ((existing && existing.c) > 0) return
+// ============ MONGOOSE SCHEMAS ============
+const studentSchema = new mongoose.Schema({
+    full_name: { type: String, required: true },
+    direction: { type: String, required: true },
+    course: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    phone: { type: String, required: true },
+    created_at: { type: Date, default: Date.now },
+})
+studentSchema.index({ email: 1 }, { collation: { locale: 'en', strength: 2 } })
 
-    const legacyExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='questions'").get()
-    if (!legacyExists) return
+const questionBankSchema = new mongoose.Schema({
+    text: { type: String, required: true },
+    question_type: { type: String, required: true },
+    question_payload: { type: mongoose.Schema.Types.Mixed, required: true },
+    correct_answer_json: { type: mongoose.Schema.Types.Mixed, required: true },
+    created_at: { type: Date, default: Date.now },
+})
 
-    const legacyRows = db
-        .prepare('SELECT id, text, option_a, option_b, option_c, option_d, correct_option, created_at FROM questions ORDER BY id ASC')
-        .all()
-    if (!legacyRows.length) return
+const testResultSchema = new mongoose.Schema({
+    student_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
+    score: { type: Number },
+    total: { type: Number },
+    answers_json: { type: mongoose.Schema.Types.Mixed },
+    question_order: { type: [mongoose.Schema.Types.ObjectId] },
+    attempt_token_hash: { type: String },
+    tab_switch_count: { type: Number, default: 0 },
+    security_events_json: { type: mongoose.Schema.Types.Mixed },
+    client_mode: { type: String },
+    last_heartbeat_at: { type: Date },
+    ended_reason: { type: String },
+    started_at: { type: Date, default: Date.now },
+    finished_at: { type: Date },
+})
 
-    const insert = db.prepare(
-        'INSERT INTO question_bank (id, text, question_type, question_payload, correct_answer_json, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    )
+const Student = mongoose.model('Student', studentSchema)
+const QuestionBank = mongoose.model('QuestionBank', questionBankSchema)
+const TestResult = mongoose.model('TestResult', testResultSchema)
 
-    const migrate = db.transaction((rows) => {
-        rows.forEach((r) => {
-            const payload = {
-                options: {
-                    A: String(r.option_a || ''),
-                    B: String(r.option_b || ''),
-                    C: String(r.option_c || ''),
-                    D: String(r.option_d || ''),
-                },
-            }
-            const answer = { correctOption: String(r.correct_option || 'A') }
-            insert.run(r.id, String(r.text || ''), 'single_choice', JSON.stringify(payload), JSON.stringify(answer), r.created_at)
-        })
-    })
-
-    migrate(legacyRows)
-}
-
+// ============ HELPER FUNCTIONS ============
 function normalizeText(value, maxLength) {
     if (typeof value !== 'string') return ''
     return value.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, maxLength)
@@ -449,52 +358,18 @@ function createIpRateLimiter(map, maxRequests, windowMs, message) {
     }
 }
 
-const limitRegisterRequests = createIpRateLimiter(
-    registerRequests,
-    REGISTER_RATE_MAX,
-    REGISTER_RATE_WINDOW_MS,
-    "Ro`yxatdan o`tish so`rovlari ko`payib ketdi. Keyinroq qayta urinib ko`ring."
-)
-
-const limitTestStartRequests = createIpRateLimiter(
-    testStartRequests,
-    TEST_START_RATE_MAX,
-    TEST_START_RATE_WINDOW_MS,
-    'Testni boshlash so`rovlari ko`payib ketdi. Keyinroq urinib ko`ring.'
-)
-
-const limitTestSubmitRequests = createIpRateLimiter(
-    testSubmitRequests,
-    TEST_SUBMIT_RATE_MAX,
-    TEST_SUBMIT_RATE_WINDOW_MS,
-    'Juda ko`p yakunlash so`rovi yuborildi. Keyinroq urinib ko`ring.'
-)
-
-const limitTestEventRequests = createIpRateLimiter(
-    testEventRequests,
-    TEST_EVENT_RATE_MAX,
-    TEST_EVENT_RATE_WINDOW_MS,
-    'Juda ko`p xavfsizlik hodisasi yuborildi. Keyinroq urinib ko`ring.'
-)
-
-function parseJsonSafe(value, fallback) {
-    try {
-        if (typeof value !== 'string') return fallback
-        const parsed = JSON.parse(value)
-        return parsed === null || parsed === undefined ? fallback : parsed
-    } catch {
-        return fallback
-    }
-}
+const limitRegisterRequests = createIpRateLimiter(registerRequests, REGISTER_RATE_MAX, REGISTER_RATE_WINDOW_MS, "Ro`yxatdan o`tish so`rovlari ko`payib ketdi. Keyinroq qayta urinib ko`ring.")
+const limitTestStartRequests = createIpRateLimiter(testStartRequests, TEST_START_RATE_MAX, TEST_START_RATE_WINDOW_MS, 'Testni boshlash so`rovlari ko`payib ketdi. Keyinroq urinib ko`ring.')
+const limitTestSubmitRequests = createIpRateLimiter(testSubmitRequests, TEST_SUBMIT_RATE_MAX, TEST_SUBMIT_RATE_WINDOW_MS, 'Juda ko`p yakunlash so`rovi yuborildi. Keyinroq urinib ko`ring.')
+const limitTestEventRequests = createIpRateLimiter(testEventRequests, TEST_EVENT_RATE_MAX, TEST_EVENT_RATE_WINDOW_MS, 'Juda ko`p xavfsizlik hodisasi yuborildi. Keyinroq urinib ko`ring.')
 
 function parseNonNegativeInt(value, fallback = 0) {
     const n = Number.parseInt(value, 10)
     return Number.isInteger(n) && n >= 0 ? n : fallback
 }
 
-function appendSecurityEvent(existingJson, eventEntry) {
-    const parsed = parseJsonSafe(existingJson, [])
-    const events = Array.isArray(parsed) ? parsed : []
+function appendSecurityEvent(existingArr, eventEntry) {
+    const events = Array.isArray(existingArr) ? [...existingArr] : []
     events.push(eventEntry)
     if (events.length > MAX_SECURITY_EVENTS_STORED) {
         return events.slice(events.length - MAX_SECURITY_EVENTS_STORED)
@@ -505,59 +380,6 @@ function appendSecurityEvent(existingJson, eventEntry) {
 function normalizeClientMode(value) {
     const mode = normalizeText(String(value || '').toLowerCase(), 12)
     return CLIENT_MODES.has(mode) ? mode : 'web'
-}
-
-function parseDbDateMs(value) {
-    if (!value) return null
-    const parsed = new Date(String(value).replace(' ', 'T'))
-    const ms = parsed.getTime()
-    return Number.isFinite(ms) ? ms : null
-}
-
-function resolveAttemptWithToken(attemptIdRaw, attemptTokenRaw) {
-    const attemptId = parsePositiveInt(attemptIdRaw)
-    const attemptToken = normalizeText(String(attemptTokenRaw || ''), 128)
-
-    if (!attemptId || !attemptToken) {
-        return { status: 400, message: "Noto'g'ri urinish ma'lumoti" }
-    }
-
-    const attempt = db.prepare('SELECT * FROM test_results WHERE id = ?').get(attemptId)
-    if (!attempt) {
-        return { status: 404, message: 'Urinish topilmadi' }
-    }
-    if (attempt.finished_at) {
-        return { status: 403, message: 'Test allaqachon yakunlangan', finished: true }
-    }
-    if (!attempt.attempt_token_hash) {
-        return { status: 403, message: 'Urinish tokeni yaroqsiz' }
-    }
-
-    const tokenHash = hashToken(attemptToken)
-    if (!safeStringCompare(attempt.attempt_token_hash, tokenHash)) {
-        return { status: 403, message: 'Urinish tokeni yaroqsiz' }
-    }
-
-    return { status: 200, attempt, tokenHash }
-}
-
-function finishAttemptByPolicy({ attemptId, tokenHash, reason, answersJson, securityEventsJson, tabSwitchCount }) {
-    const update = db
-        .prepare(
-            `UPDATE test_results
-             SET score = 0,
-                 answers_json = ?,
-                 finished_at = datetime('now','localtime'),
-                 attempt_token_hash = NULL,
-                 ended_reason = ?,
-                 security_events_json = ?,
-                 tab_switch_count = ?
-             WHERE id = ?
-               AND finished_at IS NULL
-               AND attempt_token_hash = ?`
-        )
-        .run(answersJson, reason, securityEventsJson, tabSwitchCount, attemptId, tokenHash)
-    return update.changes > 0
 }
 
 function normalizeFreeText(value) {
@@ -578,11 +400,11 @@ function uniqueStringList(values) {
 
 function parseQuestionRow(row) {
     return {
-        id: row.id,
+        id: row._id,
         text: row.text,
         questionType: row.question_type,
-        questionPayload: parseJsonSafe(row.question_payload, {}),
-        correctAnswer: parseJsonSafe(row.correct_answer_json, {}),
+        questionPayload: row.question_payload,
+        correctAnswer: row.correct_answer_json,
         createdAt: row.created_at,
     }
 }
@@ -595,149 +417,62 @@ function parseChoiceOptions(body) {
     if (!optionA || !optionB || !optionC || !optionD) {
         return { error: 'Variantlar to`liq kiritilishi kerak (A, B, C, D).' }
     }
-    return {
-        value: {
-            A: optionA,
-            B: optionB,
-            C: optionC,
-            D: optionD,
-        },
-    }
+    return { value: { A: optionA, B: optionB, C: optionC, D: optionD } }
 }
 
 function parseQuestionPayload(body) {
     const text = normalizeText(body.text, MAX_QUESTION_LEN)
     const questionType = normalizeText(String(body.question_type || 'single_choice').toLowerCase(), 30)
 
-    if (!text) {
-        return { error: "Savol matnini kiriting" }
-    }
-    if (!QUESTION_TYPES.has(questionType)) {
-        return { error: "Savol turi noto`g`ri" }
-    }
+    if (!text) return { error: "Savol matnini kiriting" }
+    if (!QUESTION_TYPES.has(questionType)) return { error: "Savol turi noto`g`ri" }
 
     if (questionType === 'single_choice') {
         const choice = parseChoiceOptions(body)
         if (choice.error) return { error: choice.error }
-
         const correctOption = normalizeText(String(body.correct_option || '').toUpperCase(), 1)
-        if (!VALID_OPTIONS.has(correctOption)) {
-            return { error: "To`g`ri variant A, B, C yoki D bo`lishi kerak" }
-        }
-
-        return {
-            value: {
-                text,
-                questionType,
-                questionPayload: { options: choice.value },
-                correctAnswer: { correctOption },
-            },
-        }
+        if (!VALID_OPTIONS.has(correctOption)) return { error: "To`g`ri variant A, B, C yoki D bo`lishi kerak" }
+        return { value: { text, questionType, questionPayload: { options: choice.value }, correctAnswer: { correctOption } } }
     }
 
     if (questionType === 'multiple_choice') {
         const choice = parseChoiceOptions(body)
         if (choice.error) return { error: choice.error }
-
         let correctOptionsRaw = body.correct_options
         if (!Array.isArray(correctOptionsRaw)) {
-            if (typeof correctOptionsRaw === 'string') {
-                correctOptionsRaw = correctOptionsRaw.split(/[,\s]+/)
-            } else {
-                correctOptionsRaw = []
-            }
+            correctOptionsRaw = typeof correctOptionsRaw === 'string' ? correctOptionsRaw.split(/[,\s]+/) : []
         }
-
-        const normalized = Array.from(
-            new Set(correctOptionsRaw.map((v) => normalizeText(String(v || '').toUpperCase(), 1)).filter((v) => VALID_OPTIONS.has(v)))
-        ).sort()
-
-        if (!normalized.length) {
-            return { error: "Kamida bitta to`g`ri variant tanlang" }
-        }
-
-        return {
-            value: {
-                text,
-                questionType,
-                questionPayload: { options: choice.value },
-                correctAnswer: { correctOptions: normalized },
-            },
-        }
+        const normalized = Array.from(new Set(correctOptionsRaw.map((v) => normalizeText(String(v || '').toUpperCase(), 1)).filter((v) => VALID_OPTIONS.has(v)))).sort()
+        if (!normalized.length) return { error: "Kamida bitta to`g`ri variant tanlang" }
+        return { value: { text, questionType, questionPayload: { options: choice.value }, correctAnswer: { correctOptions: normalized } } }
     }
 
     if (questionType === 'text_input') {
         let acceptedRaw = body.accepted_answers
         if (!Array.isArray(acceptedRaw)) {
-            if (typeof acceptedRaw === 'string') {
-                acceptedRaw = acceptedRaw.split(/\r?\n|,/)
-            } else {
-                acceptedRaw = []
-            }
+            acceptedRaw = typeof acceptedRaw === 'string' ? acceptedRaw.split(/\r?\n|,/) : []
         }
-
         const acceptedAnswers = uniqueStringList(acceptedRaw).slice(0, MAX_TEXT_ANSWERS)
-        if (!acceptedAnswers.length) {
-            return { error: "Kamida bitta to`g`ri javob matnini kiriting" }
-        }
-
-        return {
-            value: {
-                text,
-                questionType,
-                questionPayload: { placeholder: 'Javobingizni kiriting' },
-                correctAnswer: { acceptedAnswers },
-            },
-        }
+        if (!acceptedAnswers.length) return { error: "Kamida bitta to`g`ri javob matnini kiriting" }
+        return { value: { text, questionType, questionPayload: { placeholder: 'Javobingizni kiriting' }, correctAnswer: { acceptedAnswers } } }
     }
 
     let pairsRaw = body.matching_pairs
     if (!Array.isArray(pairsRaw)) {
         if (typeof pairsRaw === 'string') {
-            pairsRaw = pairsRaw
-                .split(/\r?\n/)
-                .map((line) => line.trim())
-                .filter(Boolean)
-                .map((line) => {
-                    const [left, ...rest] = line.split('|')
-                    return { left, right: rest.join('|') }
-                })
+            pairsRaw = pairsRaw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => { const [left, ...rest] = line.split('|'); return { left, right: rest.join('|') } })
         } else {
             pairsRaw = []
         }
     }
-
-    const pairs = pairsRaw
-        .map((p) => ({
-            left: normalizeText((p && p.left) || '', MAX_OPTION_LEN),
-            right: normalizeText((p && p.right) || '', MAX_OPTION_LEN),
-        }))
-        .filter((p) => p.left && p.right)
-        .slice(0, MAX_MATCHING_PAIRS)
-        .map((p, index) => ({ id: String(index + 1), left: p.left, right: p.right }))
-
-    if (pairs.length < 2) {
-        return { error: "Moslashtirish turida kamida 2 juftlik bo`lishi kerak" }
-    }
-
-    return {
-        value: {
-            text,
-            questionType,
-            questionPayload: { pairs },
-            correctAnswer: { pairIds: pairs.map((p) => p.id) },
-        },
-    }
+    const pairs = pairsRaw.map((p) => ({ left: normalizeText((p && p.left) || '', MAX_OPTION_LEN), right: normalizeText((p && p.right) || '', MAX_OPTION_LEN) }))
+        .filter((p) => p.left && p.right).slice(0, MAX_MATCHING_PAIRS).map((p, index) => ({ id: String(index + 1), left: p.left, right: p.right }))
+    if (pairs.length < 2) return { error: "Moslashtirish turida kamida 2 juftlik bo`lishi kerak" }
+    return { value: { text, questionType, questionPayload: { pairs }, correctAnswer: { pairIds: pairs.map((p) => p.id) } } }
 }
 
 function serializeQuestionForAdmin(question) {
-    const base = {
-        id: question.id,
-        text: question.text,
-        question_type: question.questionType,
-        created_at: question.createdAt,
-    }
-
+    const base = { id: question.id, text: question.text, question_type: question.questionType, created_at: question.createdAt }
     if (question.questionType === 'single_choice' || question.questionType === 'multiple_choice') {
         const options = question.questionPayload.options || {}
         base.option_a = options.A || ''
@@ -748,44 +483,25 @@ function serializeQuestionForAdmin(question) {
         base.correct_options = Array.isArray(question.correctAnswer.correctOptions) ? question.correctAnswer.correctOptions : []
         return base
     }
-
     if (question.questionType === 'text_input') {
         base.accepted_answers = Array.isArray(question.correctAnswer.acceptedAnswers) ? question.correctAnswer.acceptedAnswers : []
         return base
     }
-
-    base.matching_pairs = Array.isArray(question.questionPayload.pairs)
-        ? question.questionPayload.pairs.map((p) => ({ id: p.id, left: p.left, right: p.right }))
-        : []
+    base.matching_pairs = Array.isArray(question.questionPayload.pairs) ? question.questionPayload.pairs.map((p) => ({ id: p.id, left: p.left, right: p.right })) : []
     return base
 }
 
 function serializeQuestionForTest(question) {
     if (question.questionType === 'single_choice' || question.questionType === 'multiple_choice') {
         const optionOrder = shuffleArray(Array.from(VALID_OPTIONS))
-        return {
-            id: question.id,
-            text: question.text,
-            type: question.questionType,
-            options: question.questionPayload.options || {},
-            optionOrder,
-        }
+        return { id: question.id, text: question.text, type: question.questionType, options: question.questionPayload.options || {}, optionOrder }
     }
-
     if (question.questionType === 'text_input') {
-        return {
-            id: question.id,
-            text: question.text,
-            type: question.questionType,
-            placeholder: question.questionPayload.placeholder || 'Javobingizni kiriting',
-        }
+        return { id: question.id, text: question.text, type: question.questionType, placeholder: question.questionPayload.placeholder || 'Javobingizni kiriting' }
     }
-
     const pairs = Array.isArray(question.questionPayload.pairs) ? question.questionPayload.pairs : []
     return {
-        id: question.id,
-        text: question.text,
-        type: question.questionType,
+        id: question.id, text: question.text, type: question.questionType,
         leftItems: pairs.map((p) => ({ id: String(p.id), text: p.left })),
         rightOptions: shuffleArray(pairs.map((p) => ({ id: String(p.id), text: p.right }))),
     }
@@ -796,27 +512,19 @@ function normalizeAnswerByQuestion(question, rawAnswer) {
         const answer = normalizeText(String(rawAnswer || '').toUpperCase(), 1)
         return VALID_OPTIONS.has(answer) ? answer : null
     }
-
     if (question.questionType === 'multiple_choice') {
         let values = rawAnswer
         if (!Array.isArray(values)) {
-            if (typeof values === 'string') {
-                values = values.split(/[,\s]+/)
-            } else {
-                return null
-            }
+            if (typeof values === 'string') values = values.split(/[,\s]+/)
+            else return null
         }
-        const normalized = Array.from(
-            new Set(values.map((v) => normalizeText(String(v || '').toUpperCase(), 1)).filter((v) => VALID_OPTIONS.has(v)))
-        ).sort()
+        const normalized = Array.from(new Set(values.map((v) => normalizeText(String(v || '').toUpperCase(), 1)).filter((v) => VALID_OPTIONS.has(v)))).sort()
         return normalized.length ? normalized : null
     }
-
     if (question.questionType === 'text_input') {
         const answer = normalizeText(String(rawAnswer || ''), MAX_OPTION_LEN)
         return answer || null
     }
-
     if (!isPlainObject(rawAnswer)) return null
     const pairs = Array.isArray(question.questionPayload.pairs) ? question.questionPayload.pairs : []
     const allowedIds = new Set(pairs.map((p) => String(p.id)))
@@ -832,12 +540,10 @@ function normalizeAnswerByQuestion(question, rawAnswer) {
 
 function isAnswerCorrect(question, normalizedAnswer) {
     if (normalizedAnswer === null || normalizedAnswer === undefined) return false
-
     if (question.questionType === 'single_choice') {
         const correct = normalizeText(String(question.correctAnswer.correctOption || '').toUpperCase(), 1)
         return normalizedAnswer === correct
     }
-
     if (question.questionType === 'multiple_choice') {
         const correct = Array.isArray(question.correctAnswer.correctOptions)
             ? Array.from(new Set(question.correctAnswer.correctOptions.map((v) => normalizeText(String(v || '').toUpperCase(), 1)))).sort()
@@ -846,37 +552,28 @@ function isAnswerCorrect(question, normalizedAnswer) {
         if (correct.length !== normalizedAnswer.length) return false
         return correct.every((value, index) => value === normalizedAnswer[index])
     }
-
     if (question.questionType === 'text_input') {
         const accepted = Array.isArray(question.correctAnswer.acceptedAnswers) ? question.correctAnswer.acceptedAnswers : []
         const acceptedNormalized = new Set(accepted.map((v) => normalizeFreeText(v)).filter(Boolean))
         return acceptedNormalized.has(normalizeFreeText(normalizedAnswer))
     }
-
     const pairIds = Array.isArray(question.correctAnswer.pairIds)
         ? question.correctAnswer.pairIds.map((id) => String(id))
-        : Array.isArray(question.questionPayload.pairs)
-            ? question.questionPayload.pairs.map((p) => String(p.id))
-            : []
+        : Array.isArray(question.questionPayload.pairs) ? question.questionPayload.pairs.map((p) => String(p.id)) : []
     if (!pairIds.length || !isPlainObject(normalizedAnswer)) return false
     return pairIds.every((id) => normalizedAnswer[id] === id)
 }
 
+// ============ EXPRESS SETUP ============
 app.disable('x-powered-by')
-
-if (IS_PROD) {
-    app.set('trust proxy', 1)
-}
+if (IS_PROD) app.set('trust proxy', 1)
 
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('X-Frame-Options', 'DENY')
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-    res.setHeader(
-        'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
-    )
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
     next()
 })
 
@@ -890,27 +587,26 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '50kb' }))
 app.use(express.urlencoded({ extended: true, limit: '50kb' }))
-app.use(
-    session({
-        name: 'olimpiada.sid',
-        secret: SESSION_SECRET,
-        resave: false,
-        saveUninitialized: false,
-        rolling: true,
-        cookie: {
-            httpOnly: true,
-            sameSite: 'lax',
-            secure: IS_PROD,
-            maxAge: 1000 * 60 * 60 * 8,
-        },
-    })
-)
+app.use(session({
+    name: 'olimpiada.sid',
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: { httpOnly: true, sameSite: 'lax', secure: IS_PROD, maxAge: 1000 * 60 * 60 * 8 },
+}))
 
-app.get('/admin.html', requireAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'))
+const EXCEL_MIME_TYPES = new Set(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/octet-stream'])
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 2 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const ext = path.extname(String(file.originalname || '')).toLowerCase()
+        const mimeOk = EXCEL_MIME_TYPES.has(String(file.mimetype || '').toLowerCase())
+        if (ext !== '.xlsx' || !mimeOk) return cb(new Error('Faqat .xlsx formatdagi fayl yuklash mumkin.'))
+        return cb(null, true)
+    },
 })
-
-app.use(express.static(path.join(__dirname, 'public')))
 
 function requireAuth(req, res, next) {
     if (req.session && req.session.isAdmin) return next()
@@ -918,8 +614,13 @@ function requireAuth(req, res, next) {
     return res.redirect('/login.html')
 }
 
+app.get('/admin.html', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'))
+})
+app.use(express.static(path.join(__dirname, 'public')))
+
 // ============ PUBLIC ROUTES ============
-app.post('/api/register', requireSameOrigin, limitRegisterRequests, (req, res) => {
+app.post('/api/register', requireSameOrigin, limitRegisterRequests, async (req, res) => {
     try {
         const fullName = normalizeText(req.body.full_name, MAX_REGISTER_FIELD_LEN)
         const direction = normalizeText(req.body.direction, MAX_REGISTER_FIELD_LEN)
@@ -927,27 +628,16 @@ app.post('/api/register', requireSameOrigin, limitRegisterRequests, (req, res) =
         const email = normalizeEmail(req.body.email)
         const phone = normalizeText(req.body.phone, MAX_PHONE_LEN)
 
-        if (!fullName || !direction || !course || !email || !phone) {
-            return res.status(400).json({ success: false, message: "Barcha maydonlarni to`ldiring" })
-        }
-        if (!VALID_COURSES.has(course)) {
-            return res.status(400).json({ success: false, message: "Kurs qiymati noto`g`ri" })
-        }
-        if (!isValidEmail(email)) {
-            return res.status(400).json({ success: false, message: 'Email formati noto`g`ri' })
-        }
-        if (!PHONE_REGEX.test(phone)) {
-            return res.status(400).json({ success: false, message: 'Telefon raqam formati noto`g`ri' })
-        }
+        if (!fullName || !direction || !course || !email || !phone) return res.status(400).json({ success: false, message: "Barcha maydonlarni to`ldiring" })
+        if (!VALID_COURSES.has(course)) return res.status(400).json({ success: false, message: "Kurs qiymati noto`g`ri" })
+        if (!isValidEmail(email)) return res.status(400).json({ success: false, message: 'Email formati noto`g`ri' })
+        if (!PHONE_REGEX.test(phone)) return res.status(400).json({ success: false, message: 'Telefon raqam formati noto`g`ri' })
 
-        const existingStudent = db.prepare('SELECT id FROM students WHERE lower(email) = lower(?)').get(email)
-        if (existingStudent) {
-            return res.status(409).json({ success: false, message: "Bu email allaqachon ro`yxatdan o`tgan" })
-        }
+        const existingStudent = await Student.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
+        if (existingStudent) return res.status(409).json({ success: false, message: "Bu email allaqachon ro`yxatdan o`tgan" })
 
-        const stmt = db.prepare('INSERT INTO students (full_name, direction, course, email, phone) VALUES (?, ?, ?, ?, ?)')
-        const result = stmt.run(fullName, direction, course, email, phone)
-        return res.json({ success: true, message: "Muvaffaqiyatli ro`yxatdan o`tdingiz!", id: result.lastInsertRowid })
+        const student = await Student.create({ full_name: fullName, direction, course, email, phone })
+        return res.json({ success: true, message: "Muvaffaqiyatli ro`yxatdan o`tdingiz!", id: student._id })
     } catch (err) {
         console.error(err)
         return res.status(500).json({ success: false, message: 'Server xatosi' })
@@ -963,10 +653,7 @@ app.post('/api/login', requireSameOrigin, (req, res) => {
 
     if (throttle.blocked) {
         res.setHeader('Retry-After', String(throttle.retryAfterSec))
-        return res.status(429).json({
-            success: false,
-            message: "Ko'p urinish bo'ldi. " + throttle.retryAfterSec + " soniyadan keyin urinib ko'ring.",
-        })
+        return res.status(429).json({ success: false, message: "Ko'p urinish bo'ldi. " + throttle.retryAfterSec + " soniyadan keyin urinib ko'ring." })
     }
 
     const isUsernameValid = safeStringCompare(username, ADMIN_USER)
@@ -978,10 +665,7 @@ app.post('/api/login', requireSameOrigin, (req, res) => {
     }
 
     req.session.regenerate((err) => {
-        if (err) {
-            console.error(err)
-            return res.status(500).json({ success: false, message: 'Server xatosi' })
-        }
+        if (err) { console.error(err); return res.status(500).json({ success: false, message: 'Server xatosi' }) }
         req.session.isAdmin = true
         clearLoginFailures(loginKey)
         return res.json({ success: true })
@@ -989,44 +673,33 @@ app.post('/api/login', requireSameOrigin, (req, res) => {
 })
 
 app.post('/api/logout', requireSameOrigin, (req, res) => {
-    req.session.destroy(() => {
-        res.clearCookie('olimpiada.sid')
-        res.json({ success: true })
-    })
+    req.session.destroy(() => { res.clearCookie('olimpiada.sid'); res.json({ success: true }) })
 })
 
-app.get('/api/me', (req, res) => {
-    res.json({ isAdmin: !!(req.session && req.session.isAdmin) })
-})
+app.get('/api/me', (req, res) => { res.json({ isAdmin: !!(req.session && req.session.isAdmin) }) })
 
 app.get('/api/health', (req, res) => {
-    res.json({
-        success: true,
-        status: 'ok',
-        now: new Date().toISOString(),
-        uptimeSec: Math.round(process.uptime()),
-    })
+    res.json({ success: true, status: 'ok', now: new Date().toISOString(), uptimeSec: Math.round(process.uptime()) })
 })
 
 // ============ ADMIN ROUTES ============
-app.get('/api/students', requireAuth, (req, res) => {
-    const rows = db.prepare('SELECT * FROM students ORDER BY created_at DESC').all()
-    res.json({ success: true, data: rows })
+app.get('/api/students', requireAuth, async (req, res) => {
+    const rows = await Student.find().sort({ created_at: -1 }).lean()
+    res.json({ success: true, data: rows.map(r => ({ ...r, id: r._id, created_at: r.created_at })) })
 })
 
-app.delete('/api/students/:id', requireAuth, requireSameOrigin, (req, res) => {
-    const studentId = parsePositiveInt(req.params.id)
-    if (!studentId) return res.status(400).json({ success: false, message: 'Noto`g`ri ID' })
-    const result = db.prepare('DELETE FROM students WHERE id = ?').run(studentId)
-    if (!result.changes) return res.status(404).json({ success: false, message: 'Talaba topilmadi' })
-    res.json({ success: true })
+app.delete('/api/students/:id', requireAuth, requireSameOrigin, async (req, res) => {
+    try {
+        const result = await Student.findByIdAndDelete(req.params.id)
+        if (!result) return res.status(404).json({ success: false, message: 'Talaba topilmadi' })
+        res.json({ success: true })
+    } catch { return res.status(400).json({ success: false, message: 'Noto`g`ri ID' }) }
 })
 
 app.get('/api/export/excel', requireAuth, async (req, res) => {
-    const rows = db.prepare('SELECT * FROM students ORDER BY created_at DESC').all()
+    const rows = await Student.find().sort({ created_at: -1 }).lean()
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet('Talabalar')
-
     sheet.columns = [
         { header: '#', key: 'n', width: 6 },
         { header: 'F.I.Sh', key: 'full_name', width: 32 },
@@ -1039,19 +712,13 @@ app.get('/api/export/excel', requireAuth, async (req, res) => {
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
     sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
     sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' }
-
     rows.forEach((r, i) => {
         sheet.addRow({
-            n: i + 1,
-            full_name: sanitizeSpreadsheetCell(r.full_name),
-            direction: sanitizeSpreadsheetCell(r.direction),
-            course: sanitizeSpreadsheetCell(r.course),
-            email: sanitizeSpreadsheetCell(r.email),
-            phone: sanitizeSpreadsheetCell(r.phone),
-            created_at: sanitizeSpreadsheetCell(r.created_at),
+            n: i + 1, full_name: sanitizeSpreadsheetCell(r.full_name), direction: sanitizeSpreadsheetCell(r.direction),
+            course: sanitizeSpreadsheetCell(r.course), email: sanitizeSpreadsheetCell(r.email),
+            phone: sanitizeSpreadsheetCell(r.phone), created_at: sanitizeSpreadsheetCell(r.created_at ? new Date(r.created_at).toLocaleString('uz') : ''),
         })
     })
-
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', 'attachment; filename="talabalar-royxati.xlsx"')
     await workbook.xlsx.write(res)
@@ -1059,169 +726,98 @@ app.get('/api/export/excel', requireAuth, async (req, res) => {
 })
 
 app.get('/api/export/word', requireAuth, async (req, res) => {
-    const rows = db.prepare('SELECT * FROM students ORDER BY created_at DESC').all()
-
+    const rows = await Student.find().sort({ created_at: -1 }).lean()
     const headers = ['#', 'F.I.Sh', "Yo'nalish", 'Kurs', 'Email', 'Telefon', 'Sana']
     const headerRow = new TableRow({
-        children: headers.map(
-            (h) =>
-                new TableCell({
-                    children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
-                    shading: { fill: '1E3A8A' },
-                })
+        children: headers.map((h) => new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+            shading: { fill: '1E3A8A' },
+        })),
+    })
+    const dataRows = rows.map((r, i) => new TableRow({
+        children: [String(i + 1), r.full_name, r.direction, r.course, r.email, r.phone, r.created_at ? new Date(r.created_at).toLocaleString('uz') : ''].map(
+            (v) => new TableCell({ children: [new Paragraph(String(v))] })
         ),
-    })
-
-    const dataRows = rows.map(
-        (r, i) =>
-            new TableRow({
-                children: [String(i + 1), r.full_name, r.direction, r.course, r.email, r.phone, r.created_at].map(
-                    (v) => new TableCell({ children: [new Paragraph(String(v))] })
-                ),
-            })
-    )
-
+    }))
     const doc = new Document({
-        sections: [
-            {
-                children: [
-                    new Paragraph({
-                        text: 'Simsiz tarmoqlar fanidan olimpiada',
-                        heading: HeadingLevel.HEADING_1,
-                        alignment: AlignmentType.CENTER,
-                    }),
-                    new Paragraph({
-                        text: "Ro'yxatdan o'tgan talabalar ro'yxati",
-                        heading: HeadingLevel.HEADING_2,
-                        alignment: AlignmentType.CENTER,
-                    }),
-                    new Paragraph({ text: ' ' }),
-                    new Table({
-                        width: { size: 100, type: WidthType.PERCENTAGE },
-                        rows: [headerRow, ...dataRows],
-                    }),
-                ],
-            },
-        ],
+        sections: [{
+            children: [
+                new Paragraph({ text: 'Simsiz tarmoqlar fanidan olimpiada', heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
+                new Paragraph({ text: "Ro'yxatdan o'tgan talabalar ro'yxati", heading: HeadingLevel.HEADING_2, alignment: AlignmentType.CENTER }),
+                new Paragraph({ text: ' ' }),
+                new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...dataRows] }),
+            ],
+        }],
     })
-
     const buffer = await Packer.toBuffer(doc)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     res.setHeader('Content-Disposition', 'attachment; filename="talabalar-royxati.docx"')
     res.send(buffer)
 })
 
-// ============ TEST ROUTES (PUBLIC) ============
-app.post('/api/test/start', requireSameOrigin, limitTestStartRequests, (req, res) => {
+// ============ TEST ROUTES ============
+app.post('/api/test/start', requireSameOrigin, limitTestStartRequests, async (req, res) => {
     try {
         const email = normalizeEmail(req.body.email)
         const clientMode = normalizeClientMode(req.body.client_mode)
-        if (!email || !isValidEmail(email)) {
-            return res.status(400).json({ success: false, message: 'Email kiriting' })
-        }
+        if (!email || !isValidEmail(email)) return res.status(400).json({ success: false, message: 'Email kiriting' })
 
-        const student = db.prepare('SELECT * FROM students WHERE lower(email) = lower(?)').get(email)
-        if (!student) {
-            return res.status(404).json({ success: false, message: "Bu email ro'yxatdan o'tmagan. Avval ro'yxatdan o'ting." })
-        }
+        const student = await Student.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
+        if (!student) return res.status(404).json({ success: false, message: "Bu email ro'yxatdan o'tmagan. Avval ro'yxatdan o'ting." })
 
-        const existing = db.prepare('SELECT * FROM test_results WHERE student_id = ? AND finished_at IS NOT NULL').get(student.id)
+        const existing = await TestResult.findOne({ student_id: student._id, finished_at: { $ne: null } })
         if (existing) {
-            return res.status(403).json({
-                success: false,
-                message: `Siz testni allaqachon topshirgansiz. Natijangiz: ${existing.score}/${existing.total}`,
-                alreadyFinished: true,
-                score: existing.score,
-                total: existing.total,
-            })
+            return res.status(403).json({ success: false, message: `Siz testni allaqachon topshirgansiz. Natijangiz: ${existing.score}/${existing.total}`, alreadyFinished: true, score: existing.score, total: existing.total })
         }
 
-        const questions = db
-            .prepare('SELECT id, text, question_type, question_payload, correct_answer_json, created_at FROM question_bank ORDER BY id ASC')
-            .all()
-            .map(parseQuestionRow)
-            .filter((q) => QUESTION_TYPES.has(q.questionType))
+        const questionDocs = await QuestionBank.find().lean()
+        const questions = questionDocs.map(parseQuestionRow).filter((q) => QUESTION_TYPES.has(q.questionType))
 
-        if (questions.length === 0) {
-            return res.status(503).json({ success: false, message: "Hozircha savollar yo'q. Tashkilotchi bilan bog'laning." })
-        }
+        if (questions.length === 0) return res.status(503).json({ success: false, message: "Hozircha savollar yo'q. Tashkilotchi bilan bog'laning." })
 
         const shuffledQuestions = shuffleArray(questions)
-        const selectedQuestions =
-            TEST_QUESTION_COUNT > 0 ? shuffledQuestions.slice(0, Math.min(TEST_QUESTION_COUNT, shuffledQuestions.length)) : shuffledQuestions
+        const selectedQuestions = TEST_QUESTION_COUNT > 0 ? shuffledQuestions.slice(0, Math.min(TEST_QUESTION_COUNT, shuffledQuestions.length)) : shuffledQuestions
         const orderIds = selectedQuestions.map((q) => q.id)
 
-        let attempt = db.prepare('SELECT * FROM test_results WHERE student_id = ? AND finished_at IS NULL').get(student.id)
+        let attempt = await TestResult.findOne({ student_id: student._id, finished_at: null })
         if (!attempt) {
-            const result = db
-                .prepare('INSERT INTO test_results (student_id, total, question_order, attempt_token_hash) VALUES (?, ?, ?, ?)')
-                .run(student.id, selectedQuestions.length, JSON.stringify(orderIds), null)
-            attempt = db.prepare('SELECT * FROM test_results WHERE id = ?').get(result.lastInsertRowid)
+            attempt = await TestResult.create({ student_id: student._id, total: selectedQuestions.length, question_order: orderIds, attempt_token_hash: null })
         } else {
-            const startedAt = new Date(String(attempt.started_at).replace(' ', 'T'))
-            const elapsedMs = Date.now() - startedAt.getTime()
+            const elapsedMs = Date.now() - new Date(attempt.started_at).getTime()
             if (elapsedMs > TEST_DURATION_MIN * 60 * 1000) {
-                db.prepare(
-                    "UPDATE test_results SET finished_at = datetime('now','localtime'), score = 0, attempt_token_hash = NULL, ended_reason = 'time_expired_before_resume' WHERE id = ?"
-                ).run(attempt.id)
-                return res.status(403).json({
-                    success: false,
-                    message: 'Test vaqti tugagan. Siz endi qayta topshira olmaysiz.',
-                    alreadyFinished: true,
-                    score: 0,
-                    total: attempt.total,
-                })
+                await TestResult.findByIdAndUpdate(attempt._id, { finished_at: new Date(), score: 0, attempt_token_hash: null, ended_reason: 'time_expired_before_resume' })
+                return res.status(403).json({ success: false, message: 'Test vaqti tugagan. Siz endi qayta topshira olmaysiz.', alreadyFinished: true, score: 0, total: attempt.total })
             }
         }
 
         const attemptToken = generateAttemptToken()
         const attemptTokenHash = hashToken(attemptToken)
-        if (clientMode === 'kiosk') {
-            db.prepare("UPDATE test_results SET attempt_token_hash = ?, client_mode = 'kiosk', last_heartbeat_at = datetime('now','localtime') WHERE id = ?")
-                .run(attemptTokenHash, attempt.id)
-        } else {
-            db.prepare("UPDATE test_results SET attempt_token_hash = ?, client_mode = 'web', last_heartbeat_at = NULL WHERE id = ?").run(
-                attemptTokenHash,
-                attempt.id
-            )
-        }
+        const updateData = { attempt_token_hash: attemptTokenHash, client_mode: clientMode }
+        if (clientMode === 'kiosk') updateData.last_heartbeat_at = new Date()
+        else updateData.last_heartbeat_at = null
+        await TestResult.findByIdAndUpdate(attempt._id, updateData)
 
-        const refreshedAttempt = db.prepare('SELECT * FROM test_results WHERE id = ?').get(attempt.id)
-        let orderFromDb = []
-        try {
-            const parsed = JSON.parse(refreshedAttempt.question_order || '[]')
-            if (Array.isArray(parsed)) {
-                orderFromDb = parsed.map((id) => parsePositiveInt(id)).filter(Boolean)
-            }
-        } catch {
-            orderFromDb = []
-        }
-        if (!orderFromDb.length) {
-            return res.status(409).json({ success: false, message: 'Savollar tartibi buzilgan. Testni qayta boshlang.' })
-        }
-        const byId = new Map(questions.map((q) => [q.id, q]))
-        const orderedQuestions = orderFromDb.map((id) => byId.get(id)).filter(Boolean)
-        if (orderedQuestions.length !== orderFromDb.length) {
-            return res.status(409).json({ success: false, message: 'Savollar yangilangan. Testni qaytadan boshlang.' })
-        }
+        const refreshedAttempt = await TestResult.findById(attempt._id)
+        const orderFromDb = Array.isArray(refreshedAttempt.question_order) ? refreshedAttempt.question_order : []
+        if (!orderFromDb.length) return res.status(409).json({ success: false, message: 'Savollar tartibi buzilgan. Testni qayta boshlang.' })
 
-        const startedAt = new Date(String(refreshedAttempt.started_at).replace(' ', 'T'))
+        const byId = new Map(questions.map((q) => [String(q.id), q]))
+        const orderedQuestions = orderFromDb.map((id) => byId.get(String(id))).filter(Boolean)
+        if (orderedQuestions.length !== orderFromDb.length) return res.status(409).json({ success: false, message: 'Savollar yangilangan. Testni qaytadan boshlang.' })
+
+        const startedAt = new Date(refreshedAttempt.started_at)
         const endsAt = new Date(startedAt.getTime() + TEST_DURATION_MIN * 60 * 1000).toISOString()
 
         return res.json({
             success: true,
             data: {
-                attemptId: refreshedAttempt.id,
+                attemptId: refreshedAttempt._id,
                 attemptToken,
                 student: { full_name: student.full_name, email: student.email },
                 durationMin: TEST_DURATION_MIN,
                 endsAt,
                 tabSwitchCount: parseNonNegativeInt(refreshedAttempt.tab_switch_count),
-                antiCheat: {
-                    tabSwitchMaxAllowed: TAB_SWITCH_MAX_ALLOWED,
-                    heartbeatIntervalSec: KIOSK_HEARTBEAT_INTERVAL_SEC,
-                    heartbeatTimeoutSec: KIOSK_HEARTBEAT_TIMEOUT_SEC,
-                },
+                antiCheat: { tabSwitchMaxAllowed: TAB_SWITCH_MAX_ALLOWED, heartbeatIntervalSec: KIOSK_HEARTBEAT_INTERVAL_SEC, heartbeatTimeoutSec: KIOSK_HEARTBEAT_TIMEOUT_SEC },
                 questions: orderedQuestions.map(serializeQuestionForTest),
             },
         })
@@ -1231,260 +827,150 @@ app.post('/api/test/start', requireSameOrigin, limitTestStartRequests, (req, res
     }
 })
 
-app.post('/api/test/event', requireSameOrigin, limitTestEventRequests, (req, res) => {
+async function resolveAttemptWithToken(attemptIdRaw, attemptTokenRaw) {
+    const attemptToken = normalizeText(String(attemptTokenRaw || ''), 128)
+    if (!attemptIdRaw || !attemptToken) return { status: 400, message: "Noto'g'ri urinish ma'lumoti" }
+
+    let attempt
+    try { attempt = await TestResult.findById(attemptIdRaw) } catch { return { status: 400, message: "Noto'g'ri ID" } }
+    if (!attempt) return { status: 404, message: 'Urinish topilmadi' }
+    if (attempt.finished_at) return { status: 403, message: 'Test allaqachon yakunlangan', finished: true }
+    if (!attempt.attempt_token_hash) return { status: 403, message: 'Urinish tokeni yaroqsiz' }
+
+    const tokenHash = hashToken(attemptToken)
+    if (!safeStringCompare(attempt.attempt_token_hash, tokenHash)) return { status: 403, message: 'Urinish tokeni yaroqsiz' }
+
+    return { status: 200, attempt, tokenHash }
+}
+
+async function finishAttemptByPolicy({ attemptId, tokenHash, reason, answersJson, securityEventsJson, tabSwitchCount }) {
+    const result = await TestResult.findOneAndUpdate(
+        { _id: attemptId, finished_at: null, attempt_token_hash: tokenHash },
+        { score: 0, answers_json: answersJson, finished_at: new Date(), attempt_token_hash: null, ended_reason: reason, security_events_json: securityEventsJson, tab_switch_count: tabSwitchCount }
+    )
+    return !!result
+}
+
+app.post('/api/test/event', requireSameOrigin, limitTestEventRequests, async (req, res) => {
     try {
         const eventType = normalizeText(String(req.body.eventType || '').toLowerCase(), 40)
         const details = normalizeText(String(req.body.details || ''), MAX_SECURITY_EVENT_DETAILS)
+        if (!SECURITY_EVENT_TYPES.has(eventType)) return res.status(400).json({ success: false, message: "Noto'g'ri hodisa ma'lumoti" })
 
-        if (!SECURITY_EVENT_TYPES.has(eventType)) {
-            return res.status(400).json({ success: false, message: "Noto'g'ri hodisa ma'lumoti" })
-        }
+        const resolved = await resolveAttemptWithToken(req.body.attemptId, req.body.attemptToken)
+        if (resolved.status !== 200) return res.status(resolved.status).json({ success: false, message: resolved.message, finished: resolved.finished })
 
-        const resolved = resolveAttemptWithToken(req.body.attemptId, req.body.attemptToken)
-        if (resolved.status !== 200) {
-            return res.status(resolved.status).json({ success: false, message: resolved.message, finished: resolved.finished })
-        }
-        const attempt = resolved.attempt
-        const tokenHash = resolved.tokenHash
-
+        const { attempt, tokenHash } = resolved
         let tabSwitchCount = parseNonNegativeInt(attempt.tab_switch_count)
-        if (eventType === 'tab_hidden' || eventType === 'kiosk_focus_lost') {
-            tabSwitchCount += 1
-        }
+        if (eventType === 'tab_hidden' || eventType === 'kiosk_focus_lost') tabSwitchCount += 1
 
-        const securityEvents = appendSecurityEvent(attempt.security_events_json, {
-            type: eventType,
-            at: new Date().toISOString(),
-            details: details || undefined,
-        })
-        const securityEventsJson = JSON.stringify(securityEvents)
+        const securityEvents = appendSecurityEvent(attempt.security_events_json, { type: eventType, at: new Date().toISOString(), details: details || undefined })
 
         if (tabSwitchCount >= TAB_SWITCH_MAX_ALLOWED) {
             const reason = eventType === 'kiosk_focus_lost' ? 'kiosk_focus_limit' : 'tab_switch_limit'
-            const finished = finishAttemptByPolicy({
-                attemptId: attempt.id,
-                tokenHash,
-                reason,
-                answersJson: String(attempt.answers_json || '{}'),
-                securityEventsJson,
-                tabSwitchCount,
-            })
-
-            if (!finished) {
-                return res.status(409).json({ success: false, message: 'Urinish holati yangilangan, testni qayta tekshiring.' })
-            }
-
+            const finished = await finishAttemptByPolicy({ attemptId: attempt._id, tokenHash, reason, answersJson: attempt.answers_json || {}, securityEventsJson: securityEvents, tabSwitchCount })
+            if (!finished) return res.status(409).json({ success: false, message: 'Urinish holati yangilangan, testni qayta tekshiring.' })
             return res.json({
                 success: true,
-                data: {
-                    tabSwitchCount,
-                    maxAllowed: TAB_SWITCH_MAX_ALLOWED,
-                    autoFinished: true,
-                    result: {
-                        score: 0,
-                        total: attempt.total,
-                        percentage: 0,
-                        timedOut: false,
-                        endedByPolicy: true,
-                        reason:
-                            reason === 'tab_switch_limit'
-                                ? 'Tab almashish limiti oshib ketdi.'
-                                : "Kiosk fokus limiti oshib ketdi.",
-                    },
-                },
+                data: { tabSwitchCount, maxAllowed: TAB_SWITCH_MAX_ALLOWED, autoFinished: true, result: { score: 0, total: attempt.total, percentage: 0, timedOut: false, endedByPolicy: true, reason: reason === 'tab_switch_limit' ? 'Tab almashish limiti oshib ketdi.' : "Kiosk fokus limiti oshib ketdi." } },
             })
         }
 
-        const update = db
-            .prepare(
-                "UPDATE test_results SET tab_switch_count = ?, security_events_json = ?, last_heartbeat_at = CASE WHEN client_mode = 'kiosk' THEN datetime('now','localtime') ELSE last_heartbeat_at END WHERE id = ? AND finished_at IS NULL AND attempt_token_hash = ?"
-            )
-            .run(tabSwitchCount, securityEventsJson, attempt.id, tokenHash)
-        if (!update.changes) {
-            return res.status(409).json({ success: false, message: 'Urinish holati yangilangan, testni qayta tekshiring.' })
-        }
+        const updateData = { tab_switch_count: tabSwitchCount, security_events_json: securityEvents }
+        if (attempt.client_mode === 'kiosk') updateData.last_heartbeat_at = new Date()
+        const updated = await TestResult.findOneAndUpdate({ _id: attempt._id, finished_at: null, attempt_token_hash: tokenHash }, updateData)
+        if (!updated) return res.status(409).json({ success: false, message: 'Urinish holati yangilangan, testni qayta tekshiring.' })
 
-        return res.json({
-            success: true,
-            data: {
-                tabSwitchCount,
-                maxAllowed: TAB_SWITCH_MAX_ALLOWED,
-                autoFinished: false,
-            },
-        })
+        return res.json({ success: true, data: { tabSwitchCount, maxAllowed: TAB_SWITCH_MAX_ALLOWED, autoFinished: false } })
     } catch (err) {
         console.error(err)
         return res.status(500).json({ success: false, message: 'Server xatosi' })
     }
 })
 
-app.post('/api/test/heartbeat', requireSameOrigin, limitTestEventRequests, (req, res) => {
+app.post('/api/test/heartbeat', requireSameOrigin, limitTestEventRequests, async (req, res) => {
     try {
-        const resolved = resolveAttemptWithToken(req.body.attemptId, req.body.attemptToken)
-        if (resolved.status !== 200) {
-            return res.status(resolved.status).json({ success: false, message: resolved.message, finished: resolved.finished })
-        }
+        const resolved = await resolveAttemptWithToken(req.body.attemptId, req.body.attemptToken)
+        if (resolved.status !== 200) return res.status(resolved.status).json({ success: false, message: resolved.message, finished: resolved.finished })
 
-        const attempt = resolved.attempt
-        const tokenHash = resolved.tokenHash
-        const update = db
-            .prepare(
-                "UPDATE test_results SET last_heartbeat_at = datetime('now','localtime') WHERE id = ? AND finished_at IS NULL AND attempt_token_hash = ?"
-            )
-            .run(attempt.id, tokenHash)
-        if (!update.changes) {
-            return res.status(409).json({ success: false, message: 'Heartbeat saqlanmadi, urinish holatini qayta tekshiring.' })
-        }
+        const { attempt, tokenHash } = resolved
+        const updated = await TestResult.findOneAndUpdate({ _id: attempt._id, finished_at: null, attempt_token_hash: tokenHash }, { last_heartbeat_at: new Date() })
+        if (!updated) return res.status(409).json({ success: false, message: 'Heartbeat saqlanmadi, urinish holatini qayta tekshiring.' })
 
-        return res.json({
-            success: true,
-            data: {
-                heartbeatTimeoutSec: KIOSK_HEARTBEAT_TIMEOUT_SEC,
-            },
-        })
+        return res.json({ success: true, data: { heartbeatTimeoutSec: KIOSK_HEARTBEAT_TIMEOUT_SEC } })
     } catch (err) {
         console.error(err)
         return res.status(500).json({ success: false, message: 'Server xatosi' })
     }
 })
 
-app.post('/api/test/force-finish', requireSameOrigin, limitTestEventRequests, (req, res) => {
+app.post('/api/test/force-finish', requireSameOrigin, limitTestEventRequests, async (req, res) => {
     try {
-        const resolved = resolveAttemptWithToken(req.body.attemptId, req.body.attemptToken)
-        if (resolved.status !== 200) {
-            return res.status(resolved.status).json({ success: false, message: resolved.message, finished: resolved.finished })
-        }
+        const resolved = await resolveAttemptWithToken(req.body.attemptId, req.body.attemptToken)
+        if (resolved.status !== 200) return res.status(resolved.status).json({ success: false, message: resolved.message, finished: resolved.finished })
 
-        const attempt = resolved.attempt
-        const tokenHash = resolved.tokenHash
+        const { attempt, tokenHash } = resolved
         const rawReason = normalizeText(String(req.body.reason || ''), 50).toLowerCase()
         const reason = FORCE_FINISH_REASONS.has(rawReason) ? rawReason : 'kiosk_policy'
         const details = normalizeText(String(req.body.details || ''), MAX_SECURITY_EVENT_DETAILS)
         const tabSwitchCount = parseNonNegativeInt(attempt.tab_switch_count)
-        const securityEvents = appendSecurityEvent(attempt.security_events_json, {
-            type: reason,
-            at: new Date().toISOString(),
-            details: details || undefined,
-        })
-        const finished = finishAttemptByPolicy({
-            attemptId: attempt.id,
-            tokenHash,
-            reason,
-            answersJson: String(attempt.answers_json || '{}'),
-            securityEventsJson: JSON.stringify(securityEvents),
-            tabSwitchCount,
-        })
-        if (!finished) {
-            return res.status(409).json({ success: false, message: 'Urinish allaqachon yakunlangan yoki yangilangan.' })
-        }
+        const securityEvents = appendSecurityEvent(attempt.security_events_json, { type: reason, at: new Date().toISOString(), details: details || undefined })
+        const finished = await finishAttemptByPolicy({ attemptId: attempt._id, tokenHash, reason, answersJson: attempt.answers_json || {}, securityEventsJson: securityEvents, tabSwitchCount })
+        if (!finished) return res.status(409).json({ success: false, message: 'Urinish allaqachon yakunlangan yoki yangilangan.' })
 
-        return res.json({
-            success: true,
-            data: {
-                score: 0,
-                total: attempt.total,
-                percentage: 0,
-                timedOut: false,
-                endedByPolicy: true,
-                reason: "Kiosk siyosati bo'yicha test yakunlandi.",
-                ended_reason: reason,
-            },
-        })
+        return res.json({ success: true, data: { score: 0, total: attempt.total, percentage: 0, timedOut: false, endedByPolicy: true, reason: "Kiosk siyosati bo'yicha test yakunlandi.", ended_reason: reason } })
     } catch (err) {
         console.error(err)
         return res.status(500).json({ success: false, message: 'Server xatosi' })
     }
 })
 
-app.post('/api/test/submit', requireSameOrigin, limitTestSubmitRequests, (req, res) => {
+app.post('/api/test/submit', requireSameOrigin, limitTestSubmitRequests, async (req, res) => {
     try {
-        const attemptId = parsePositiveInt(req.body.attemptId)
         const attemptToken = normalizeText(String(req.body.attemptToken || ''), 128)
         const answers = req.body.answers
+        if (!req.body.attemptId || !attemptToken || !isPlainObject(answers)) return res.status(400).json({ success: false, message: "Noto'g'ri ma'lumot" })
 
-        if (!attemptId || !attemptToken || !isPlainObject(answers)) {
-            return res.status(400).json({ success: false, message: "Noto'g'ri ma'lumot" })
-        }
-
-        const attempt = db.prepare('SELECT * FROM test_results WHERE id = ?').get(attemptId)
+        let attempt
+        try { attempt = await TestResult.findById(req.body.attemptId) } catch { return res.status(400).json({ success: false, message: "Noto'g'ri ID" }) }
         if (!attempt) return res.status(404).json({ success: false, message: 'Urinish topilmadi' })
         if (attempt.finished_at) return res.status(403).json({ success: false, message: 'Test allaqachon topshirilgan' })
         if (!attempt.attempt_token_hash) return res.status(403).json({ success: false, message: 'Urinish tokeni yaroqsiz' })
 
         const tokenHash = hashToken(attemptToken)
-        if (!safeStringCompare(attempt.attempt_token_hash, tokenHash)) {
-            return res.status(403).json({ success: false, message: 'Urinish tokeni yaroqsiz' })
-        }
+        if (!safeStringCompare(attempt.attempt_token_hash, tokenHash)) return res.status(403).json({ success: false, message: 'Urinish tokeni yaroqsiz' })
 
-        const startedAt = new Date(String(attempt.started_at).replace(' ', 'T'))
-        const elapsedMs = Date.now() - startedAt.getTime()
+        const elapsedMs = Date.now() - new Date(attempt.started_at).getTime()
         const timedOut = elapsedMs > (TEST_DURATION_MIN + 1) * 60 * 1000
 
-        let questionOrder = []
-        try {
-            const parsedOrder = JSON.parse(attempt.question_order || '[]')
-            if (Array.isArray(parsedOrder)) {
-                questionOrder = parsedOrder.map((id) => parsePositiveInt(id)).filter(Boolean)
-            }
-        } catch {
-            questionOrder = []
-        }
+        const questionOrder = Array.isArray(attempt.question_order) ? attempt.question_order : []
+        if (!questionOrder.length) return res.status(400).json({ success: false, message: 'Savollar tartibi buzilgan' })
 
-        if (questionOrder.length === 0) {
-            return res.status(400).json({ success: false, message: 'Savollar tartibi buzilgan' })
-        }
-
-        const placeholders = questionOrder.map(() => '?').join(',')
-        const questionRows = db
-            .prepare(`SELECT id, text, question_type, question_payload, correct_answer_json, created_at FROM question_bank WHERE id IN (${placeholders})`)
-            .all(...questionOrder)
-            .map(parseQuestionRow)
-        const questionsById = new Map(questionRows.map((q) => [q.id, q]))
-        if (!questionRows.length) {
-            return res.status(400).json({ success: false, message: 'Savollar topilmadi' })
-        }
+        const questionDocs = await QuestionBank.find({ _id: { $in: questionOrder } }).lean()
+        const questionsById = new Map(questionDocs.map((q) => [String(q._id), parseQuestionRow(q)]))
+        if (!questionDocs.length) return res.status(400).json({ success: false, message: 'Savollar topilmadi' })
 
         const cleanedAnswers = {}
         let score = 0
         for (const questionId of questionOrder) {
-            const question = questionsById.get(questionId)
+            const question = questionsById.get(String(questionId))
             if (!question) continue
-
             const rawAnswer = answers[String(questionId)]
             const normalizedAnswer = normalizeAnswerByQuestion(question, rawAnswer)
-            if (normalizedAnswer !== null) {
-                cleanedAnswers[questionId] = normalizedAnswer
-            }
-
-            if (isAnswerCorrect(question, normalizedAnswer)) {
-                score++
-            }
+            if (normalizedAnswer !== null) cleanedAnswers[String(questionId)] = normalizedAnswer
+            if (isAnswerCorrect(question, normalizedAnswer)) score++
         }
 
-        if (timedOut) {
-            score = 0
-        }
-
+        if (timedOut) score = 0
         const endedReason = timedOut ? 'time_expired' : 'submitted'
-        const updateResult = db
-            .prepare(
-                'UPDATE test_results SET score = ?, answers_json = ?, finished_at = datetime(\'now\',\'localtime\'), attempt_token_hash = NULL, ended_reason = ? WHERE id = ? AND finished_at IS NULL AND attempt_token_hash = ?'
-            )
-            .run(score, JSON.stringify(cleanedAnswers), endedReason, attemptId, tokenHash)
 
-        if (!updateResult.changes) {
-            return res.status(409).json({ success: false, message: 'Test natijasi allaqachon saqlangan' })
-        }
+        const updated = await TestResult.findOneAndUpdate(
+            { _id: attempt._id, finished_at: null, attempt_token_hash: tokenHash },
+            { score, answers_json: cleanedAnswers, finished_at: new Date(), attempt_token_hash: null, ended_reason: endedReason }
+        )
+        if (!updated) return res.status(409).json({ success: false, message: 'Test natijasi allaqachon saqlangan' })
 
-        return res.json({
-            success: true,
-            data: {
-                score,
-                total: attempt.total,
-                percentage: attempt.total ? Math.round((score / attempt.total) * 100) : 0,
-                timedOut,
-            },
-        })
+        return res.json({ success: true, data: { score, total: attempt.total, percentage: attempt.total ? Math.round((score / attempt.total) * 100) : 0, timedOut } })
     } catch (err) {
         console.error(err)
         return res.status(500).json({ success: false, message: 'Server xatosi' })
@@ -1492,106 +978,66 @@ app.post('/api/test/submit', requireSameOrigin, limitTestSubmitRequests, (req, r
 })
 
 // ============ ADMIN: QUESTIONS ============
-app.get('/api/admin/questions', requireAuth, (req, res) => {
-    const rows = db
-        .prepare('SELECT id, text, question_type, question_payload, correct_answer_json, created_at FROM question_bank ORDER BY id DESC')
-        .all()
-        .map(parseQuestionRow)
-        .map(serializeQuestionForAdmin)
-    res.json({ success: true, data: rows })
+app.get('/api/admin/questions', requireAuth, async (req, res) => {
+    const rows = await QuestionBank.find().sort({ _id: -1 }).lean()
+    res.json({ success: true, data: rows.map(parseQuestionRow).map(serializeQuestionForAdmin) })
 })
 
-app.post('/api/admin/questions', requireAuth, requireSameOrigin, (req, res) => {
+app.post('/api/admin/questions', requireAuth, requireSameOrigin, async (req, res) => {
     const parsed = parseQuestionPayload(req.body)
-    if (parsed.error) {
-        return res.status(400).json({ success: false, message: parsed.error })
-    }
-
-    const result = db
-        .prepare('INSERT INTO question_bank (text, question_type, question_payload, correct_answer_json) VALUES (?,?,?,?)')
-        .run(parsed.value.text, parsed.value.questionType, JSON.stringify(parsed.value.questionPayload), JSON.stringify(parsed.value.correctAnswer))
-    res.json({ success: true, id: result.lastInsertRowid })
+    if (parsed.error) return res.status(400).json({ success: false, message: parsed.error })
+    const q = await QuestionBank.create({ text: parsed.value.text, question_type: parsed.value.questionType, question_payload: parsed.value.questionPayload, correct_answer_json: parsed.value.correctAnswer })
+    res.json({ success: true, id: q._id })
 })
 
-app.put('/api/admin/questions/:id', requireAuth, requireSameOrigin, (req, res) => {
-    const questionId = parsePositiveInt(req.params.id)
-    if (!questionId) return res.status(400).json({ success: false, message: 'Noto`g`ri ID' })
-
+app.put('/api/admin/questions/:id', requireAuth, requireSameOrigin, async (req, res) => {
     const parsed = parseQuestionPayload(req.body)
-    if (parsed.error) {
-        return res.status(400).json({ success: false, message: parsed.error })
-    }
-
-    const update = db
-        .prepare('UPDATE question_bank SET text=?, question_type=?, question_payload=?, correct_answer_json=? WHERE id=?')
-        .run(parsed.value.text, parsed.value.questionType, JSON.stringify(parsed.value.questionPayload), JSON.stringify(parsed.value.correctAnswer), questionId)
-
-    if (!update.changes) {
-        return res.status(404).json({ success: false, message: 'Savol topilmadi' })
-    }
-
-    res.json({ success: true })
+    if (parsed.error) return res.status(400).json({ success: false, message: parsed.error })
+    try {
+        const updated = await QuestionBank.findByIdAndUpdate(req.params.id, { text: parsed.value.text, question_type: parsed.value.questionType, question_payload: parsed.value.questionPayload, correct_answer_json: parsed.value.correctAnswer })
+        if (!updated) return res.status(404).json({ success: false, message: 'Savol topilmadi' })
+        res.json({ success: true })
+    } catch { return res.status(400).json({ success: false, message: 'Noto`g`ri ID' }) }
 })
 
-app.delete('/api/admin/questions/:id', requireAuth, requireSameOrigin, (req, res) => {
-    const questionId = parsePositiveInt(req.params.id)
-    if (!questionId) return res.status(400).json({ success: false, message: 'Noto`g`ri ID' })
-    const result = db.prepare('DELETE FROM question_bank WHERE id = ?').run(questionId)
-    if (!result.changes) return res.status(404).json({ success: false, message: 'Savol topilmadi' })
-    res.json({ success: true })
+app.delete('/api/admin/questions/:id', requireAuth, requireSameOrigin, async (req, res) => {
+    try {
+        const result = await QuestionBank.findByIdAndDelete(req.params.id)
+        if (!result) return res.status(404).json({ success: false, message: 'Savol topilmadi' })
+        res.json({ success: true })
+    } catch { return res.status(400).json({ success: false, message: 'Noto`g`ri ID' }) }
 })
 
 app.post('/api/admin/questions/import', requireAuth, requireSameOrigin, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, message: 'Fayl yuklanmagan' })
-
         const workbook = new ExcelJS.Workbook()
         await workbook.xlsx.load(req.file.buffer)
         const sheet = workbook.worksheets[0]
         if (!sheet) return res.status(400).json({ success: false, message: "Excel fayl bo'sh" })
 
-        const insert = db.prepare(
-            'INSERT INTO question_bank (text, question_type, question_payload, correct_answer_json) VALUES (?,?,?,?)'
-        )
-        let added = 0
-        let errors = 0
-
-        const insertMany = db.transaction((rows) => {
-            rows.forEach((r) => {
-                try {
-                    const payload = { options: { A: r.a, B: r.b, C: r.c, D: r.d } }
-                    const answer = { correctOption: r.correct }
-                    insert.run(r.text, 'single_choice', JSON.stringify(payload), JSON.stringify(answer))
-                    added++
-                } catch {
-                    errors++
-                }
-            })
-        })
-
+        let added = 0, errors = 0
         const rows = []
         sheet.eachRow((row, rowNumber) => {
             if (rowNumber === 1) return
-            if (rows.length >= MAX_IMPORT_ROWS) {
-                errors++
-                return
-            }
-
+            if (rows.length >= MAX_IMPORT_ROWS) { errors++; return }
             const text = normalizeText(String(row.getCell(1).text || ''), MAX_QUESTION_LEN)
             const a = normalizeText(String(row.getCell(2).text || ''), MAX_OPTION_LEN)
             const b = normalizeText(String(row.getCell(3).text || ''), MAX_OPTION_LEN)
             const c = normalizeText(String(row.getCell(4).text || ''), MAX_OPTION_LEN)
             const d = normalizeText(String(row.getCell(5).text || ''), MAX_OPTION_LEN)
             const correct = normalizeText(String(row.getCell(6).text || '').toUpperCase(), 1)
-
-            if (text && a && b && c && d && VALID_OPTIONS.has(correct)) {
-                rows.push({ text, a, b, c, d, correct })
-            } else {
-                errors++
-            }
+            if (text && a && b && c && d && VALID_OPTIONS.has(correct)) rows.push({ text, a, b, c, d, correct })
+            else errors++
         })
 
-        insertMany(rows)
+        for (const r of rows) {
+            try {
+                await QuestionBank.create({ text: r.text, question_type: 'single_choice', question_payload: { options: { A: r.a, B: r.b, C: r.c, D: r.d } }, correct_answer_json: { correctOption: r.correct } })
+                added++
+            } catch { errors++ }
+        }
+
         const limitWarning = sheet.rowCount - 1 > MAX_IMPORT_ROWS ? `, ${MAX_IMPORT_ROWS} tadan ortig'i qabul qilinmadi` : ''
         res.json({ success: true, added, errors, message: `${added} ta savol qo'shildi${errors ? ', ' + errors + ' ta xato' : ''}${limitWarning}` })
     } catch (err) {
@@ -1604,32 +1050,14 @@ app.get('/api/admin/questions/template', requireAuth, async (req, res) => {
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet('Savollar')
     sheet.columns = [
-        { header: 'Savol', key: 'text', width: 50 },
-        { header: 'A varianti', key: 'a', width: 25 },
-        { header: 'B varianti', key: 'b', width: 25 },
-        { header: 'C varianti', key: 'c', width: 25 },
-        { header: 'D varianti', key: 'd', width: 25 },
-        { header: "To'g'ri javob (A/B/C/D)", key: 'correct', width: 22 },
+        { header: 'Savol', key: 'text', width: 50 }, { header: 'A varianti', key: 'a', width: 25 },
+        { header: 'B varianti', key: 'b', width: 25 }, { header: 'C varianti', key: 'c', width: 25 },
+        { header: 'D varianti', key: 'd', width: 25 }, { header: "To'g'ri javob (A/B/C/D)", key: 'correct', width: 22 },
     ]
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
     sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
-    sheet.addRow({
-        text: 'Wi-Fi qaysi IEEE standartida ishlaydi?',
-        a: '802.3',
-        b: '802.11',
-        c: '802.15',
-        d: '802.16',
-        correct: 'B',
-    })
-    sheet.addRow({
-        text: 'Bluetooth qaysi chastotada ishlaydi?',
-        a: '900 MHz',
-        b: '1.8 GHz',
-        c: '2.4 GHz',
-        d: '5 GHz',
-        correct: 'C',
-    })
-
+    sheet.addRow({ text: 'Wi-Fi qaysi IEEE standartida ishlaydi?', a: '802.3', b: '802.11', c: '802.15', d: '802.16', correct: 'B' })
+    sheet.addRow({ text: 'Bluetooth qaysi chastotada ishlaydi?', a: '900 MHz', b: '1.8 GHz', c: '2.4 GHz', d: '5 GHz', correct: 'C' })
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', 'attachment; filename="savollar-shablon.xlsx"')
     await workbook.xlsx.write(res)
@@ -1637,66 +1065,45 @@ app.get('/api/admin/questions/template', requireAuth, async (req, res) => {
 })
 
 // ============ ADMIN: RESULTS ============
-app.get('/api/admin/results', requireAuth, (req, res) => {
-    const rows = db
-        .prepare(
-            `SELECT r.id, r.score, r.total, r.started_at, r.finished_at, r.tab_switch_count, r.ended_reason, r.client_mode,
-                    s.full_name, s.direction, s.course, s.email, s.phone
-             FROM test_results r
-             JOIN students s ON s.id = r.student_id
-             ORDER BY r.finished_at DESC NULLS LAST, r.started_at DESC`
-        )
-        .all()
-    res.json({ success: true, data: rows })
+app.get('/api/admin/results', requireAuth, async (req, res) => {
+    const rows = await TestResult.find().populate('student_id', 'full_name direction course email phone').sort({ finished_at: -1, started_at: -1 }).lean()
+    const data = rows.map((r) => ({
+        id: r._id, score: r.score, total: r.total,
+        started_at: r.started_at, finished_at: r.finished_at,
+        tab_switch_count: r.tab_switch_count, ended_reason: r.ended_reason, client_mode: r.client_mode,
+        full_name: r.student_id?.full_name, direction: r.student_id?.direction,
+        course: r.student_id?.course, email: r.student_id?.email, phone: r.student_id?.phone,
+    }))
+    res.json({ success: true, data })
 })
 
 app.get('/api/admin/results/excel', requireAuth, async (req, res) => {
-    const rows = db
-        .prepare(
-            `SELECT r.score, r.total, r.started_at, r.finished_at, r.tab_switch_count, r.ended_reason, r.client_mode,
-                    s.full_name, s.direction, s.course, s.email, s.phone
-             FROM test_results r
-             JOIN students s ON s.id = r.student_id
-             WHERE r.finished_at IS NOT NULL
-             ORDER BY r.score DESC, r.finished_at ASC`
-        )
-        .all()
+    const rows = await TestResult.find({ finished_at: { $ne: null } }).populate('student_id', 'full_name direction course email phone').sort({ score: -1, finished_at: 1 }).lean()
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet('Natijalar')
     sheet.columns = [
-        { header: '#', key: 'n', width: 6 },
-        { header: 'F.I.Sh', key: 'full_name', width: 30 },
-        { header: "Yo'nalish", key: 'direction', width: 28 },
-        { header: 'Kurs', key: 'course', width: 10 },
-        { header: 'Email', key: 'email', width: 26 },
-        { header: 'Telefon', key: 'phone', width: 18 },
-        { header: 'Ball', key: 'score', width: 10 },
-        { header: 'Jami', key: 'total', width: 10 },
-        { header: '%', key: 'pct', width: 8 },
-        { header: 'Rejim', key: 'client_mode', width: 10 },
-        { header: 'Tab switch', key: 'tab_switch_count', width: 12 },
-        { header: 'Yakun sababi', key: 'ended_reason', width: 22 },
-        { header: 'Boshlangan', key: 'started_at', width: 20 },
-        { header: 'Tugatgan', key: 'finished_at', width: 20 },
+        { header: '#', key: 'n', width: 6 }, { header: 'F.I.Sh', key: 'full_name', width: 30 },
+        { header: "Yo'nalish", key: 'direction', width: 28 }, { header: 'Kurs', key: 'course', width: 10 },
+        { header: 'Email', key: 'email', width: 26 }, { header: 'Telefon', key: 'phone', width: 18 },
+        { header: 'Ball', key: 'score', width: 10 }, { header: 'Jami', key: 'total', width: 10 },
+        { header: '%', key: 'pct', width: 8 }, { header: 'Rejim', key: 'client_mode', width: 10 },
+        { header: 'Tab switch', key: 'tab_switch_count', width: 12 }, { header: 'Yakun sababi', key: 'ended_reason', width: 22 },
+        { header: 'Boshlangan', key: 'started_at', width: 20 }, { header: 'Tugatgan', key: 'finished_at', width: 20 },
     ]
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
     sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
     rows.forEach((r, i) => {
+        const s = r.student_id || {}
         sheet.addRow({
-            n: i + 1,
-            full_name: sanitizeSpreadsheetCell(r.full_name),
-            direction: sanitizeSpreadsheetCell(r.direction),
-            course: sanitizeSpreadsheetCell(r.course),
-            email: sanitizeSpreadsheetCell(r.email),
-            phone: sanitizeSpreadsheetCell(r.phone),
-            score: r.score,
-            total: r.total,
+            n: i + 1, full_name: sanitizeSpreadsheetCell(s.full_name || ''), direction: sanitizeSpreadsheetCell(s.direction || ''),
+            course: sanitizeSpreadsheetCell(s.course || ''), email: sanitizeSpreadsheetCell(s.email || ''),
+            phone: sanitizeSpreadsheetCell(s.phone || ''), score: r.score, total: r.total,
             pct: r.total ? Math.round((r.score / r.total) * 100) + '%' : '-',
             client_mode: sanitizeSpreadsheetCell(r.client_mode || 'web'),
             tab_switch_count: parseNonNegativeInt(r.tab_switch_count),
             ended_reason: sanitizeSpreadsheetCell(r.ended_reason || 'submitted'),
-            started_at: sanitizeSpreadsheetCell(r.started_at),
-            finished_at: sanitizeSpreadsheetCell(r.finished_at),
+            started_at: r.started_at ? new Date(r.started_at).toLocaleString('uz') : '',
+            finished_at: r.finished_at ? new Date(r.finished_at).toLocaleString('uz') : '',
         })
     })
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -1705,69 +1112,58 @@ app.get('/api/admin/results/excel', requireAuth, async (req, res) => {
     res.end()
 })
 
-function runKioskHeartbeatWatchdog() {
+// ============ KIOSK WATCHDOG ============
+async function runKioskHeartbeatWatchdog() {
     try {
-        const attempts = db
-            .prepare(
-                "SELECT id, total, started_at, last_heartbeat_at, security_events_json, tab_switch_count FROM test_results WHERE finished_at IS NULL AND client_mode = 'kiosk' AND attempt_token_hash IS NOT NULL"
-            )
-            .all()
-
         const nowMs = Date.now()
         const timeoutMs = KIOSK_HEARTBEAT_TIMEOUT_SEC * 1000
-        attempts.forEach((attempt) => {
-            const heartbeatMs = parseDbDateMs(attempt.last_heartbeat_at) || parseDbDateMs(attempt.started_at)
-            if (!heartbeatMs) return
-            if (nowMs - heartbeatMs <= timeoutMs) return
+        const attempts = await TestResult.find({ finished_at: null, client_mode: 'kiosk', attempt_token_hash: { $ne: null } })
 
-            const securityEvents = appendSecurityEvent(attempt.security_events_json, {
-                type: 'kiosk_heartbeat_lost',
-                at: new Date().toISOString(),
-                details: 'watchdog-timeout',
-            })
-
-            db.prepare(
-                "UPDATE test_results SET score = 0, answers_json = COALESCE(answers_json, '{}'), finished_at = datetime('now','localtime'), attempt_token_hash = NULL, ended_reason = 'kiosk_heartbeat_lost', security_events_json = ?, tab_switch_count = ? WHERE id = ? AND finished_at IS NULL AND client_mode = 'kiosk'"
-            ).run(JSON.stringify(securityEvents), parseNonNegativeInt(attempt.tab_switch_count), attempt.id)
-        })
+        for (const attempt of attempts) {
+            const heartbeatMs = attempt.last_heartbeat_at ? new Date(attempt.last_heartbeat_at).getTime() : new Date(attempt.started_at).getTime()
+            if (!heartbeatMs || nowMs - heartbeatMs <= timeoutMs) continue
+            const securityEvents = appendSecurityEvent(attempt.security_events_json, { type: 'kiosk_heartbeat_lost', at: new Date().toISOString(), details: 'watchdog-timeout' })
+            await TestResult.findOneAndUpdate(
+                { _id: attempt._id, finished_at: null, client_mode: 'kiosk' },
+                { score: 0, finished_at: new Date(), attempt_token_hash: null, ended_reason: 'kiosk_heartbeat_lost', security_events_json: securityEvents, tab_switch_count: parseNonNegativeInt(attempt.tab_switch_count) }
+            )
+        }
     } catch (err) {
         console.error('Heartbeat watchdog xatosi:', err)
     }
 }
 
-const heartbeatWatchdogTimer = setInterval(runKioskHeartbeatWatchdog, WATCHDOG_INTERVAL_MS)
-if (typeof heartbeatWatchdogTimer.unref === 'function') {
-    heartbeatWatchdogTimer.unref()
-}
-
+// ============ ERROR HANDLER ============
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
-        if (err.code === 'LIMIT_FILE_SIZE') {
-            return res.status(400).json({ success: false, message: 'Excel fayl hajmi 2 MB dan oshmasligi kerak' })
-        }
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: 'Excel fayl hajmi 2 MB dan oshmasligi kerak' })
         return res.status(400).json({ success: false, message: 'Faylni yuklashda xatolik' })
     }
-
-    if (err && err.message === 'Faqat .xlsx formatdagi fayl yuklash mumkin.') {
-        return res.status(400).json({ success: false, message: err.message })
-    }
-
-    if (err) {
-        console.error(err)
-        return res.status(500).json({ success: false, message: 'Server xatosi' })
-    }
-
+    if (err && err.message === 'Faqat .xlsx formatdagi fayl yuklash mumkin.') return res.status(400).json({ success: false, message: err.message })
+    if (err) { console.error(err); return res.status(500).json({ success: false, message: 'Server xatosi' }) }
     return next()
 })
 
-app.listen(PORT, () => {
-    console.log('\n  Simsiz tarmoqlar olimpiadasi serveri')
-    console.log(`  Ro'yxatdan o'tish:  http://localhost:${PORT}`)
-    console.log(`  Admin panel:         http://localhost:${PORT}/login.html`)
-    console.log(`  Test sahifasi:       http://localhost:${PORT}/test.html`)
-    console.log(`  Admin user:          ${ADMIN_USER}`)
-    console.log(`  Test davomiyligi:    ${TEST_DURATION_MIN} daqiqa\n`)
-    console.log(`  Tab switch limiti:   ${TAB_SWITCH_MAX_ALLOWED}`)
-    console.log(`  Savol subset hajmi:  ${TEST_QUESTION_COUNT > 0 ? TEST_QUESTION_COUNT : 'barchasi'}\n`)
-    console.log(`  Heartbeat (sec):     ${KIOSK_HEARTBEAT_INTERVAL_SEC} / timeout ${KIOSK_HEARTBEAT_TIMEOUT_SEC}\n`)
+// ============ START SERVER ============
+async function startServer() {
+    const mongoUri = MONGODB_URI || 'mongodb://localhost:27017/olimpiada'
+    await mongoose.connect(mongoUri)
+    console.log('MongoDB ga ulandi!')
+
+    const heartbeatWatchdogTimer = setInterval(runKioskHeartbeatWatchdog, WATCHDOG_INTERVAL_MS)
+    if (typeof heartbeatWatchdogTimer.unref === 'function') heartbeatWatchdogTimer.unref()
+
+    app.listen(PORT, () => {
+        console.log('\n  Simsiz tarmoqlar olimpiadasi serveri (MongoDB)')
+        console.log(`  Ro'yxatdan o'tish:  http://localhost:${PORT}`)
+        console.log(`  Admin panel:         http://localhost:${PORT}/login.html`)
+        console.log(`  Test sahifasi:       http://localhost:${PORT}/test.html`)
+        console.log(`  Admin user:          ${ADMIN_USER}`)
+        console.log(`  Test davomiyligi:    ${TEST_DURATION_MIN} daqiqa\n`)
+    })
+}
+
+startServer().catch((err) => {
+    console.error('Server ishga tushmadi:', err)
+    process.exit(1)
 })
