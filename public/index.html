@@ -5,43 +5,75 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Simsiz tarmoqlar olimpiadasi — Ro'yxatdan o'tish</title>
         <link rel="stylesheet" href="/style.css" />
+        <style>
+            .lang-switcher {
+                position: fixed;
+                top: 16px;
+                right: 20px;
+                z-index: 1000;
+                display: flex;
+                gap: 6px;
+            }
+            .lang-btn {
+                padding: 6px 14px;
+                border: 2px solid #1e3a8a;
+                border-radius: 20px;
+                background: white;
+                color: #1e3a8a;
+                font-weight: 600;
+                font-size: 13px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .lang-btn.active {
+                background: #1e3a8a;
+                color: white;
+            }
+            .lang-btn:hover:not(.active) {
+                background: #e8f0fe;
+            }
+        </style>
     </head>
     <body>
+        <div class="lang-switcher">
+            <button class="lang-btn active" onclick="setLang('uz')" id="btnUz">O'zbek</button>
+            <button class="lang-btn" onclick="setLang('ru')" id="btnRu">Русский</button>
+        </div>
+
         <div class="page">
             <header class="hero">
                 <div class="hero-inner">
                     <div class="badge">📡 Olimpiada 2026</div>
-                    <h1>Simsiz tarmoqlar fanidan olimpiada</h1>
-                    <p class="subtitle">Talabalar uchun bilim sinovi. Avval ro'yxatdan o'ting, test havolasi alohida beriladi.</p>
-                    
+                    <h1 data-uz="Simsiz tarmoqlar fanidan olimpiada" data-ru="Олимпиада по предмету Беспроводные сети">Simsiz tarmoqlar fanidan olimpiada</h1>
+                    <p class="subtitle" data-uz="Talabalar uchun bilim sinovi. Avval ro'yxatdan o'ting, test havolasi alohida beriladi." data-ru="Тест знаний для студентов. Сначала зарегистрируйтесь, ссылка на тест будет выдана отдельно.">Talabalar uchun bilim sinovi. Avval ro'yxatdan o'ting, test havolasi alohida beriladi.</p>
                 </div>
             </header>
 
             <main class="container">
                 <div class="card">
-                    <h2>Ro'yxatdan o'tish</h2>
-                    <p class="muted">Quyidagi ma'lumotlarni to'ldiring. Test sahifasi havolasi keyin alohida beriladi.</p>
+                    <h2 data-uz="Ro'yxatdan o'tish" data-ru="Регистрация">Ro'yxatdan o'tish</h2>
+                    <p class="muted" data-uz="Quyidagi ma'lumotlarni to'ldiring. Test sahifasi havolasi keyin alohida beriladi." data-ru="Заполните следующие данные. Ссылка на тест будет выдана отдельно.">Quyidagi ma'lumotlarni to'ldiring. Test sahifasi havolasi keyin alohida beriladi.</p>
 
                     <form id="regForm" class="form">
                         <div class="field">
-                            <label for="full_name">F.I.Sh <span class="req">*</span></label>
-                            <input type="text" id="full_name" name="full_name" placeholder="Ismingiz Familiyangiz Otangizning ismi" required />
+                            <label for="full_name"><span data-uz="F.I.Sh" data-ru="Ф.И.О">F.I.Sh</span> <span class="req">*</span></label>
+                            <input type="text" id="full_name" name="full_name" placeholder="Ismingiz Familiyangiz" required />
                         </div>
 
                         <div class="row">
                             <div class="field">
-                                <label for="direction">Yo'nalish <span class="req">*</span></label>
-                                <input type="text" id="direction" name="direction" placeholder="Masalan: Telekommunikatsiya texnologiyalari" required />
+                                <label for="direction"><span data-uz="Yo'nalish" data-ru="Направление">Yo'nalish</span> <span class="req">*</span></label>
+                                <input type="text" id="direction" name="direction" data-placeholder-uz="Masalan: Telekommunikatsiya texnologiyalari" data-placeholder-ru="Например: Телекоммуникационные технологии" placeholder="Masalan: Telekommunikatsiya texnologiyalari" required />
                             </div>
                             <div class="field">
-                                <label for="course">Kurs <span class="req">*</span></label>
+                                <label for="course"><span data-uz="Kurs" data-ru="Курс">Kurs</span> <span class="req">*</span></label>
                                 <select id="course" name="course" required>
-                                    <option value="">Tanlang</option>
-                                    <option value="1-kurs">1-kurs</option>
-                                    <option value="2-kurs">2-kurs</option>
-                                    <option value="3-kurs">3-kurs</option>
-                                    <option value="4-kurs">4-kurs</option>
-                                    <option value="Magistratura">Magistratura</option>
+                                    <option value="" data-uz="Tanlang" data-ru="Выберите">Tanlang</option>
+                                    <option value="1-kurs" data-uz="1-kurs" data-ru="1 курс">1-kurs</option>
+                                    <option value="2-kurs" data-uz="2-kurs" data-ru="2 курс">2-kurs</option>
+                                    <option value="3-kurs" data-uz="3-kurs" data-ru="3 курс">3-kurs</option>
+                                    <option value="4-kurs" data-uz="4-kurs" data-ru="4 курс">4-kurs</option>
+                                    <option value="Magistratura" data-uz="Magistratura" data-ru="Магистратура">Magistratura</option>
                                 </select>
                             </div>
                         </div>
@@ -52,12 +84,12 @@
                                 <input type="email" id="email" name="email" placeholder="sizning@email.com" required />
                             </div>
                             <div class="field">
-                                <label for="phone">Telefon raqam <span class="req">*</span></label>
+                                <label for="phone"><span data-uz="Telefon raqam" data-ru="Номер телефона">Telefon raqam</span> <span class="req">*</span></label>
                                 <input type="tel" id="phone" name="phone" placeholder="+998 90 123 45 67" required />
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-primary" id="submitBtn">Ro'yxatdan o'tish</button>
+                        <button type="submit" class="btn btn-primary" id="submitBtn" data-uz="Ro'yxatdan o'tish" data-ru="Зарегистрироваться">Ro'yxatdan o'tish</button>
                     </form>
 
                     <div id="message" class="message hidden"></div>
@@ -66,18 +98,18 @@
                 <div class="info-grid">
                     <div class="info-card">
                         <div class="info-icon">📝</div>
-                        <h3>1-bosqich</h3>
-                        <p>Ro'yxatdan o'tish va ma'lumotlarni tasdiqlash</p>
+                        <h3 data-uz="1-bosqich" data-ru="1 этап">1-bosqich</h3>
+                        <p data-uz="Ro'yxatdan o'tish va ma'lumotlarni tasdiqlash" data-ru="Регистрация и подтверждение данных">Ro'yxatdan o'tish va ma'lumotlarni tasdiqlash</p>
                     </div>
                     <div class="info-card">
                         <div class="info-icon">💻</div>
-                        <h3>2-bosqich</h3>
-                        <p>Onlayn test topshirish</p>
+                        <h3 data-uz="2-bosqich" data-ru="2 этап">2-bosqich</h3>
+                        <p data-uz="Onlayn test topshirish" data-ru="Прохождение онлайн теста">Onlayn test topshirish</p>
                     </div>
                     <div class="info-card">
                         <div class="info-icon">🏆</div>
-                        <h3>3-bosqich</h3>
-                        <p>G'oliblarni e'lon qilish va mukofotlash</p>
+                        <h3 data-uz="3-bosqich" data-ru="3 этап">3-bosqich</h3>
+                        <p data-uz="G'oliblarni e'lon qilish va mukofotlash" data-ru="Объявление победителей и награждение">G'oliblarni e'lon qilish va mukofotlash</p>
                     </div>
                 </div>
             </main>
@@ -88,6 +120,61 @@
         </div>
 
         <script src="/app.js"></script>
+        <script>
+            const TRANSLATIONS = {
+                uz: {
+                    sending: "Yuborilmoqda...",
+                    submitBtn: "Ro'yxatdan o'tish",
+                    successSuffix: " Test havolasi sizga alohida yuboriladi.",
+                    errorDefault: "Xatolik yuz berdi",
+                    serverError: "Server bilan bog'lanishda xatolik",
+                    fullNamePlaceholder: "Ismingiz Familiyangiz Otangizning ismi",
+                },
+                ru: {
+                    sending: "Отправка...",
+                    submitBtn: "Зарегистрироваться",
+                    successSuffix: " Ссылка на тест будет выдана отдельно.",
+                    errorDefault: "Произошла ошибка",
+                    serverError: "Ошибка подключения к серверу",
+                    fullNamePlaceholder: "Фамилия Имя Отчество",
+                }
+            }
+
+            let currentLang = localStorage.getItem('lang') || 'uz'
+
+            function setLang(lang) {
+                currentLang = lang
+                localStorage.setItem('lang', lang)
+                document.documentElement.lang = lang
+
+                document.getElementById('btnUz').classList.toggle('active', lang === 'uz')
+                document.getElementById('btnRu').classList.toggle('active', lang === 'ru')
+
+                // Update all data-uz / data-ru elements
+                document.querySelectorAll('[data-uz]').forEach(el => {
+                    if (el.tagName === 'INPUT' || el.tagName === 'BUTTON') {
+                        if (el.dataset[lang]) el.value = el.dataset[lang]
+                    } else if (el.tagName === 'OPTION') {
+                        el.textContent = el.dataset[lang] || el.textContent
+                    } else {
+                        el.textContent = el.dataset[lang] || el.textContent
+                    }
+                })
+
+                // Update placeholders
+                document.querySelectorAll('[data-placeholder-uz]').forEach(el => {
+                    el.placeholder = lang === 'uz' ? el.dataset.placeholderUz : el.dataset.placeholderRu
+                })
+
+                // Update submit button text
+                document.getElementById('submitBtn').textContent = TRANSLATIONS[lang].submitBtn
+                document.getElementById('full_name').placeholder = TRANSLATIONS[lang].fullNamePlaceholder
+            }
+
+            setLang(currentLang)
+
+            // Override app.js submit to use current lang
+            window._getLangText = (key) => TRANSLATIONS[currentLang][key] || TRANSLATIONS['uz'][key]
+        </script>
     </body>
 </html>
-
