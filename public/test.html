@@ -297,6 +297,7 @@
                     if (data.success) {
                         attemptId = data.data.attemptId
                         attemptToken = data.data.attemptToken
+
                         questions = Array.isArray(data.data.questions) ? data.data.questions : []
                         answers = {}
                         endsAt = new Date(data.data.endsAt).getTime()
@@ -312,7 +313,7 @@
                         }
                         showTest()
                     } else {
-                        msg.textContent = '❌ ' + (data.message || t('emailError'))
+                        msg.textContent = '❌ ' + translateServerMsg(data.message || t('emailError'))
                         msg.className = 'message error'
                     }
                 } catch (err) {
@@ -557,7 +558,7 @@
                     if (data.success) {
                         showResult(data.data)
                     } else {
-                        alert(t('submitError') + data.message)
+                        alert(t('submitError') + translateServerMsg(data.message))
                         document.getElementById('submitTestBtn').disabled = false
                         renderCurrentQuestion()
                         startTimer()
@@ -848,6 +849,52 @@
             }
             setupKioskBridgeListeners.bound = false
             setupKioskBridgeListeners()
+
+            // Server xabarlarini tarjima qilish lug'ati
+            const SERVER_MSG_RU = {
+                // Ro'yxatdan o'tish
+                "Barcha maydonlarni to`ldiring": "Заполните все поля",
+                "Kurs qiymati noto`g`ri": "Неверное значение курса",
+                "Email formati noto`g`ri": "Неверный формат email",
+                "Telefon raqam formati noto`g`ri": "Неверный формат номера телефона",
+                "Bu email allaqachon ro`yxatdan o`tgan": "Этот email уже зарегистрирован",
+                "Muvaffaqiyatli ro`yxatdan o`tdingiz!": "Вы успешно зарегистрировались!",
+                // Test boshlash
+                "Email kiriting": "Введите email",
+                "Bu email ro'yxatdan o'tmagan. Avval ro'yxatdan o'ting.": "Этот email не зарегистрирован. Сначала зарегистрируйтесь.",
+                "Hozircha savollar yo'q. Tashkilotchi bilan bog'laning.": "Вопросов пока нет. Свяжитесь с организатором.",
+                "Siz testni allaqachon topshirgansiz.": "Вы уже прошли тест.",
+                // Test jarayoni
+                "Savollar tartibi buzilgan. Testni qayta boshlang.": "Порядок вопросов нарушен. Начните тест заново.",
+                "Savollar yangilangan. Testni qaytadan boshlang.": "Вопросы обновлены. Начните тест заново.",
+                "Test natijasi allaqachon saqlangan": "Результат теста уже сохранён",
+                "Test allaqachon topshirilgan": "Тест уже был сдан",
+                "Urinish topilmadi": "Попытка не найдена",
+                "Urinish tokeni yaroqsiz": "Токен попытки недействителен",
+                "Test allaqachon yakunlangan": "Тест уже завершён",
+                "Urinish holati yangilangan, testni qayta tekshiring.": "Состояние попытки изменилось, проверьте тест.",
+                "Savollar topilmadi": "Вопросы не найдены",
+                "Savollar tartibi buzilgan": "Порядок вопросов нарушен",
+                // Umumiy
+                "Server xatosi": "Ошибка сервера",
+                "Noto`g`ri ma'lumot": "Неверные данные",
+                // Rate limit
+                "Ro`yxatdan o`tish so`rovlari ko`payib ketdi. Keyinroq qayta urinib ko`ring.": "Слишком много запросов на регистрацию. Попробуйте позже.",
+                "Testni boshlash so`rovlari ko`payib ketdi. Keyinroq urinib ko`ring.": "Слишком много запросов на начало теста. Попробуйте позже.",
+                "Juda ko`p yakunlash so`rovi yuborildi. Keyinroq urinib ko`ring.": "Слишком много запросов на завершение. Попробуйте позже.",
+            }
+
+            function translateServerMsg(msg) {
+                if (!msg) return msg
+                if (currentLang !== 'ru') return msg
+                // To'liq moslik
+                if (SERVER_MSG_RU[msg]) return SERVER_MSG_RU[msg]
+                // Qisman moslik (masalan "Siz testni allaqachon topshirgansiz. Natijangiz: 5/30")
+                for (const [uz, ru] of Object.entries(SERVER_MSG_RU)) {
+                    if (msg.startsWith(uz)) return ru + msg.slice(uz.length)
+                }
+                return msg
+            }
 
             function escapeHtml(str) {
                 return String(str || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])

@@ -23,9 +23,24 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {
         }
     }[lang] || {}
 
+    const SERVER_MSG_RU = {
+        "Barcha maydonlarni to`ldiring": "Заполните все поля",
+        "Kurs qiymati noto`g`ri": "Неверное значение курса",
+        "Email formati noto`g`ri": "Неверный формат email",
+        "Telefon raqam formati noto`g`ri": "Неверный формат номера телефона",
+        "Bu email allaqachon ro`yxatdan o`tgan": "Этот email уже зарегистрирован",
+        "Muvaffaqiyatli ro`yxatdan o`tdingiz!": "Вы успешно зарегистрировались!",
+        "Server xatosi": "Ошибка сервера",
+        "Ro`yxatdan o`tish so`rovlari ko`payib ketdi. Keyinroq qayta urinib ko`ring.": "Слишком много запросов. Попробуйте позже.",
+    }
+
+    function translateMsg(m) {
+        if (!m || lang !== 'ru') return m
+        return SERVER_MSG_RU[m] || m
+    }
+
     btn.disabled = true
     btn.textContent = t.sending
-
     msg.className = 'message hidden'
 
     try {
@@ -36,11 +51,11 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {
         })
         const data = await res.json()
         if (data.success) {
-            msg.textContent = "✅ " + data.message + (t.successSuffix || '')
+            msg.textContent = "✅ " + translateMsg(data.message) + (t.successSuffix || '')
             msg.className = 'message success'
             e.target.reset()
         } else {
-            msg.textContent = '❌ ' + (data.message || t.errorDefault)
+            msg.textContent = '❌ ' + translateMsg(data.message || t.errorDefault)
             msg.className = 'message error'
         }
     } catch (err) {
