@@ -5,49 +5,15 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Test — Simsiz tarmoqlar olimpiadasi</title>
         <link rel="stylesheet" href="/style.css" />
-        <style>
-            .lang-switcher {
-                position: fixed;
-                top: 16px;
-                right: 20px;
-                z-index: 1000;
-                display: flex;
-                gap: 6px;
-            }
-            .lang-btn {
-                padding: 6px 14px;
-                border: 2px solid #1e3a8a;
-                border-radius: 20px;
-                background: white;
-                color: #1e3a8a;
-                font-weight: 600;
-                font-size: 13px;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-            .lang-btn.active {
-                background: #1e3a8a;
-                color: white;
-            }
-            .lang-btn:hover:not(.active) {
-                background: #e8f0fe;
-            }
-        </style>
     </head>
     <body class="test-body">
-
-        <div class="lang-switcher" id="langSwitcher">
-            <button class="lang-btn active" onclick="setLang('uz')" id="btnUz">O'zbek</button>
-            <button class="lang-btn" onclick="setLang('ru')" id="btnRu">Русский</button>
-        </div>
-
         <!-- STEP 1: Email verification -->
         <div id="emailStep" class="center-page">
             <div class="login-card">
                 <div class="login-header">
-                    <div class="badge">📝 <span id="t_badge">Test bosqichi</span></div>
-                    <h2 id="t_title">Testga kirish</h2>
-                    <p class="muted" id="t_subtitle">Ro'yxatdan o'tgan emailingizni kiriting</p>
+                    <div class="badge">📝 Test bosqichi</div>
+                    <h2>Testga kirish</h2>
+                    <p class="muted">Ro'yxatdan o'tgan emailingizni kiriting</p>
                 </div>
                 <form id="emailForm" class="form">
                     <div class="field">
@@ -58,7 +24,7 @@
                     <div id="emailMsg" class="message hidden"></div>
                 </form>
                 <div class="login-footer">
-                    <a href="/" id="t_backHome">← Bosh sahifa</a>
+                    <a href="/">← Bosh sahifa</a>
                 </div>
             </div>
         </div>
@@ -68,7 +34,7 @@
             <header class="test-header">
                 <div class="test-header-inner">
                     <div>
-                        <div class="test-title" id="t_testTitle">Simsiz tarmoqlar olimpiadasi</div>
+                        <div class="test-title">Simsiz tarmoqlar olimpiadasi</div>
                         <div class="test-student" id="studentInfo"></div>
                     </div>
                     <div class="timer" id="timer">--:--</div>
@@ -80,7 +46,7 @@
             <div id="securityAlert" class="security-alert hidden"></div>
             <div id="focusWarningModal" class="focus-warning-modal hidden" role="dialog" aria-modal="true" aria-live="assertive">
                 <div class="focus-warning-card">
-                    <h3 id="t_warningTitle">Diqqat: Birinchi Ogohlantirish</h3>
+                    <h3>Diqqat: Birinchi Ogohlantirish</h3>
                     <p id="focusWarningText">
                         Siz test oynasidan chiqdingiz. Yana bir marta chiqilsa test avtomatik yakunlanadi.
                     </p>
@@ -91,10 +57,10 @@
             <main class="test-container">
                 <div id="questionsContainer"></div>
                 <div class="test-footer">
-                    <div class="answered-info" id="answeredInfo">0 / 0</div>
+                    <div class="answered-info" id="answeredInfo">0 / 0 javob berilgan</div>
                     <div class="test-nav-actions">
-                        <button id="prevQuestionBtn" class="btn btn-ghost" type="button" id="t_prev">Oldingi</button>
-                        <button id="nextQuestionBtn" class="btn btn-primary" type="button" id="t_next">Keyingi</button>
+                        <button id="prevQuestionBtn" class="btn btn-ghost" type="button">Oldingi</button>
+                        <button id="nextQuestionBtn" class="btn btn-primary" type="button">Keyingi</button>
                         <button id="submitTestBtn" class="btn btn-success btn-large" type="button">Testni yakunlash</button>
                     </div>
                 </div>
@@ -112,144 +78,11 @@
                 </div>
                 <div class="score-pct" id="scorePct">0%</div>
                 <p class="muted" id="resultMsg">Natijangiz yuqorida ko'rsatilgan.</p>
-                <a href="/" class="btn btn-primary" id="t_backHomeBtn">Bosh sahifaga qaytish</a>
+                <a href="/" class="btn btn-primary">Bosh sahifaga qaytish</a>
             </div>
         </div>
 
-        <script>
-            // ============ TRANSLATIONS ============
-            const T = {
-                uz: {
-                    badge: "Test bosqichi",
-                    title: "Testga kirish",
-                    subtitle: "Ro'yxatdan o'tgan emailingizni kiriting",
-                    startBtn: "Testni boshlash",
-                    loading: "Yuklanmoqda...",
-                    backHome: "← Bosh sahifa",
-                    backHomeBtn: "Bosh sahifaga qaytish",
-                    testTitle: "Simsiz tarmoqlar olimpiadasi",
-                    warningTitle: "Diqqat: Birinchi Ogohlantirish",
-                    focusWarning: "Siz test oynasidan chiqdingiz. Yana bir marta chiqilsa test avtomatik yakunlanadi.",
-                    understood: "Tushundim",
-                    prev: "Oldingi",
-                    next: "Keyingi",
-                    submitTest: "Testni yakunlash",
-                    answeredInfo: (cur, total, ans) => `${cur} / ${total} savol • ${ans} / ${total} javob berilgan`,
-                    questionNum: (i, total) => `Savol ${i} / ${total}`,
-                    multipleHint: "Bir nechta variant tanlashingiz mumkin.",
-                    matchingHint: "Chap va o'ng mos juftliklarni tanlang.",
-                    matchingSelect: "Tanlang",
-                    answerLabel: "Javobingiz",
-                    confirmUnanswered: (n) => `${n} ta savolga javob bermadingiz. Haqiqatdan yakunlashni xohlaysizmi?`,
-                    timeUp: "Vaqt tugadi. Test avtomatik yakunlanadi.",
-                    serverError: "Server bilan bog'lanib bo'lmadi",
-                    copyBlocked: "Nusxa olish bloklandi.",
-                    contextBlocked: "O'ng tugma menyusi bloklandi.",
-                    shortcutBlocked: "Ushbu klaviatura kombinatsiyasi bloklandi.",
-                    printscreenBlocked: "PrintScreen urinishi loglandi.",
-                    heartbeatLost: "Server bilan aloqa uzildi. Test xavfsizlik uchun yakunlanadi.",
-                    tabLimitWarn: (n) => `Diqqat: yana ${n} ta imkon qoldi.`,
-                    tabLimitDone: "Tab/fokus limiti tugadi. Test yakunlanadi.",
-                    focusFirst: "Siz test oynasidan birinchi marta chiqdingiz. 2-marta chiqilsa test avtomatik yakunlanadi.",
-                    focusPrev: (n, rem) => `Avvalgi urinishdan ${n} ta chiqish qayd etilgan. Qolgan limit: ${rem}.`,
-                    focusPrev1: "Avvalgi urinishdan 1 ta chiqish qayd etilgan. Yana bir marta chiqilsa test yakunlanadi.",
-                    resultTitle: "Test yakunlandi!",
-                    resultMsg: "Natijangiz yuqorida ko'rsatilgan.",
-                    resultPolicyTitle: "Test avtomatik yakunlandi",
-                    resultPolicyMsg: "Qoidabuzarlik limiti oshdi.",
-                    resultTimeTitle: "Vaqt tugadi",
-                    resultTimeMsg: "Belgilangan vaqt yakunlandi.",
-                    resultLow: "Ko'proq mashq qiling!",
-                    resultOk: "Yaxshi, lekin yaxshiroq bo'lishi mumkin!",
-                    resultGood: "Zo'r natija!",
-                    resultPerfect: "Mukammal!",
-                    emailError: "Xatolik",
-                    alreadyFinished: (s, t) => `Siz testni allaqachon topshirgansiz. Natijangiz: ${s}/${t}`,
-                    submitError: "Xatolik: ",
-                },
-                ru: {
-                    badge: "Этап тестирования",
-                    title: "Вход в тест",
-                    subtitle: "Введите email, с которым вы зарегистрировались",
-                    startBtn: "Начать тест",
-                    loading: "Загрузка...",
-                    backHome: "← Главная страница",
-                    backHomeBtn: "Вернуться на главную",
-                    testTitle: "Олимпиада по беспроводным сетям",
-                    warningTitle: "Внимание: Первое предупреждение",
-                    focusWarning: "Вы вышли из окна теста. Ещё один выход — тест завершится автоматически.",
-                    understood: "Понятно",
-                    prev: "Назад",
-                    next: "Далее",
-                    submitTest: "Завершить тест",
-                    answeredInfo: (cur, total, ans) => `${cur} / ${total} вопрос • ${ans} / ${total} ответов дано`,
-                    questionNum: (i, total) => `Вопрос ${i} / ${total}`,
-                    multipleHint: "Можно выбрать несколько вариантов.",
-                    matchingHint: "Выберите соответствующие пары слева и справа.",
-                    matchingSelect: "Выберите",
-                    answerLabel: "Ваш ответ",
-                    confirmUnanswered: (n) => `Вы не ответили на ${n} вопросов. Действительно завершить?`,
-                    timeUp: "Время вышло. Тест завершается автоматически.",
-                    serverError: "Не удалось подключиться к серверу",
-                    copyBlocked: "Копирование заблокировано.",
-                    contextBlocked: "Контекстное меню заблокировано.",
-                    shortcutBlocked: "Эта комбинация клавиш заблокирована.",
-                    printscreenBlocked: "Попытка PrintScreen зафиксирована.",
-                    heartbeatLost: "Соединение с сервером потеряно. Тест завершается в целях безопасности.",
-                    tabLimitWarn: (n) => `Внимание: осталось ещё ${n} попыток.`,
-                    tabLimitDone: "Лимит вкладок/фокуса исчерпан. Тест завершается.",
-                    focusFirst: "Вы впервые вышли из окна теста. При повторном выходе тест завершится автоматически.",
-                    focusPrev: (n, rem) => `В предыдущей попытке зафиксировано ${n} выходов. Осталось попыток: ${rem}.`,
-                    focusPrev1: "В предыдущей попытке зафиксирован 1 выход. Ещё один — тест завершится.",
-                    resultTitle: "Тест завершён!",
-                    resultMsg: "Ваш результат показан выше.",
-                    resultPolicyTitle: "Тест завершён автоматически",
-                    resultPolicyMsg: "Превышен лимит нарушений.",
-                    resultTimeTitle: "Время вышло",
-                    resultTimeMsg: "Отведённое время истекло.",
-                    resultLow: "Нужно больше практики!",
-                    resultOk: "Хорошо, но можно лучше!",
-                    resultGood: "Отличный результат!",
-                    resultPerfect: "Превосходно!",
-                    emailError: "Ошибка",
-                    alreadyFinished: (s, t) => `Вы уже прошли тест. Ваш результат: ${s}/${t}`,
-                    submitError: "Ошибка: ",
-                }
-            }
-
-            let currentLang = localStorage.getItem('lang') || 'uz'
-            function t(key, ...args) {
-                const val = T[currentLang][key] || T['uz'][key]
-                return typeof val === 'function' ? val(...args) : val
-            }
-
-            function setLang(lang) {
-                currentLang = lang
-                localStorage.setItem('lang', lang)
-                document.documentElement.lang = lang
-                document.getElementById('btnUz').classList.toggle('active', lang === 'uz')
-                document.getElementById('btnRu').classList.toggle('active', lang === 'ru')
-                applyTranslations()
-            }
-
-            function applyTranslations() {
-                document.getElementById('t_badge').textContent = t('badge')
-                document.getElementById('t_title').textContent = t('title')
-                document.getElementById('t_subtitle').textContent = t('subtitle')
-                document.getElementById('startBtn').textContent = t('startBtn')
-                document.getElementById('t_backHome').textContent = t('backHome')
-                document.getElementById('t_testTitle').textContent = t('testTitle')
-                document.getElementById('t_warningTitle').textContent = t('warningTitle')
-                document.getElementById('focusWarningOkBtn').textContent = t('understood')
-                document.getElementById('prevQuestionBtn').textContent = t('prev')
-                document.getElementById('nextQuestionBtn').textContent = t('next')
-                document.getElementById('submitTestBtn').textContent = t('submitTest')
-                document.getElementById('t_backHomeBtn').textContent = t('backHomeBtn')
-            }
-
-            setLang(currentLang)
-
-            // ============ VARIABLES ============
+                <script>
             let attemptId = null
             let attemptToken = null
             let questions = []
@@ -284,20 +117,19 @@
                 const msg = document.getElementById('emailMsg')
                 const btn = document.getElementById('startBtn')
                 btn.disabled = true
-                btn.textContent = t('loading')
+                btn.textContent = 'Yuklanmoqda...'
                 msg.className = 'message hidden'
 
                 try {
                     const res = await fetch('/api/test/start', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email, client_mode: isKioskClient ? 'kiosk' : 'web' }),
+                        body: JSON.stringify({ email, client_mode: isKioskClient ? 'kiosk' : 'web', lang: localStorage.getItem('lang') || 'uz' }),
                     })
                     const data = await res.json()
                     if (data.success) {
                         attemptId = data.data.attemptId
                         attemptToken = data.data.attemptToken
-
                         questions = Array.isArray(data.data.questions) ? data.data.questions : []
                         answers = {}
                         endsAt = new Date(data.data.endsAt).getTime()
@@ -305,41 +137,53 @@
                         testFinished = false
                         activeStudent = data.data.student || null
                         tabSwitchCount = Number.isInteger(data.data.tabSwitchCount) ? data.data.tabSwitchCount : 0
-                        tabSwitchMaxAllowed = data.data.antiCheat && Number.isInteger(data.data.antiCheat.tabSwitchMaxAllowed) ? data.data.antiCheat.tabSwitchMaxAllowed : 3
-                        heartbeatIntervalMs = data.data.antiCheat && Number.isInteger(data.data.antiCheat.heartbeatIntervalSec) ? Math.max(3000, data.data.antiCheat.heartbeatIntervalSec * 1000) : 8000
+                        tabSwitchMaxAllowed =
+                            data.data.antiCheat && Number.isInteger(data.data.antiCheat.tabSwitchMaxAllowed)
+                                ? data.data.antiCheat.tabSwitchMaxAllowed
+                                : 3
+                        heartbeatIntervalMs =
+                            data.data.antiCheat && Number.isInteger(data.data.antiCheat.heartbeatIntervalSec)
+                                ? Math.max(3000, data.data.antiCheat.heartbeatIntervalSec * 1000)
+                                : 8000
                         document.getElementById('studentInfo').textContent = activeStudent ? activeStudent.full_name : ''
                         if (window.kioskBridge && window.kioskBridge.setAttemptContext) {
                             window.kioskBridge.setAttemptContext({ attemptId, attemptToken })
                         }
                         showTest()
                     } else {
-                        msg.textContent = '❌ ' + translateServerMsg(data.message || t('emailError'))
+                        msg.textContent = 'X ' + (data.message || 'Xatolik')
                         msg.className = 'message error'
                     }
                 } catch (err) {
-                    msg.textContent = '❌ ' + t('serverError')
+                    msg.textContent = 'X Server bilan bog\'lanib bo\'lmadi'
                     msg.className = 'message error'
                 } finally {
                     btn.disabled = false
-                    btn.textContent = t('startBtn')
+                    btn.textContent = 'Testni boshlash'
                 }
             })
 
-            if (prefilledEmail) document.getElementById('email').value = prefilledEmail
+            if (prefilledEmail) {
+                document.getElementById('email').value = prefilledEmail
+            }
             if (isKioskClient) {
                 const backFooter = document.querySelector('.login-footer')
-                if (backFooter) backFooter.classList.add('hidden')
-                document.getElementById('langSwitcher').style.display = 'none'
+                if (backFooter) {
+                    backFooter.classList.add('hidden')
+                }
             }
-
             focusWarningOkBtn.addEventListener('click', () => {
                 hideFocusWarningModal()
-                try { window.focus() } catch {}
+                try {
+                    window.focus()
+                } catch {
+                    // ignore
+                }
             })
 
             function renderQuestionCard(q, idx) {
                 const head = `
-                    <div class="question-number">${t('questionNum', idx + 1, questions.length)}</div>
+                    <div class="question-number">Savol ${idx + 1} / ${questions.length}</div>
                     <div class="question-text">${escapeHtml(q.text)}</div>
                 `
 
@@ -349,13 +193,17 @@
                         <div class="question-card" data-qid="${q.id}">
                             ${head}
                             <div class="options">
-                                ${optionOrder.map((letter) => `
-                                    <label class="option">
-                                        <input type="radio" data-question-type="single_choice" data-qid="${q.id}" name="q${q.id}" value="${letter}" />
-                                        <span class="option-letter">${letter}</span>
-                                        <span class="option-text">${escapeHtml((q.options || {})[letter] || '')}</span>
-                                    </label>
-                                `).join('')}
+                                ${optionOrder
+                                    .map(
+                                        (letter) => `
+                                        <label class="option">
+                                            <input type="radio" data-question-type="single_choice" data-qid="${q.id}" name="q${q.id}" value="${letter}" />
+                                            <span class="option-letter">${letter}</span>
+                                            <span class="option-text">${escapeHtml((q.options || {})[letter] || '')}</span>
+                                        </label>
+                                    `
+                                    )
+                                    .join('')}
                             </div>
                         </div>
                     `
@@ -366,15 +214,19 @@
                     return `
                         <div class="question-card" data-qid="${q.id}">
                             ${head}
-                            <div class="muted" style="margin-bottom:8px">${t('multipleHint')}</div>
+                            <div class="muted" style="margin-bottom:8px">Bir nechta variant tanlashingiz mumkin.</div>
                             <div class="options">
-                                ${optionOrder.map((letter) => `
-                                    <label class="option">
-                                        <input type="checkbox" data-question-type="multiple_choice" data-qid="${q.id}" name="q${q.id}" value="${letter}" />
-                                        <span class="option-letter">${letter}</span>
-                                        <span class="option-text">${escapeHtml((q.options || {})[letter] || '')}</span>
-                                    </label>
-                                `).join('')}
+                                ${optionOrder
+                                    .map(
+                                        (letter) => `
+                                        <label class="option">
+                                            <input type="checkbox" data-question-type="multiple_choice" data-qid="${q.id}" name="q${q.id}" value="${letter}" />
+                                            <span class="option-letter">${letter}</span>
+                                            <span class="option-text">${escapeHtml((q.options || {})[letter] || '')}</span>
+                                        </label>
+                                    `
+                                    )
+                                    .join('')}
                             </div>
                         </div>
                     `
@@ -385,8 +237,13 @@
                         <div class="question-card" data-qid="${q.id}">
                             ${head}
                             <div class="field">
-                                <label>${t('answerLabel')}</label>
-                                <input type="text" data-question-type="text_input" data-qid="${q.id}" placeholder="${escapeHtml(q.placeholder || t('answerLabel'))}" />
+                                <label>Javobingiz</label>
+                                <input
+                                    type="text"
+                                    data-question-type="text_input"
+                                    data-qid="${q.id}"
+                                    placeholder="${escapeHtml(q.placeholder || 'Javobingizni kiriting')}"
+                                />
                             </div>
                         </div>
                     `
@@ -395,19 +252,25 @@
                 return `
                     <div class="question-card" data-qid="${q.id}">
                         ${head}
-                        <div class="muted" style="margin-bottom:8px">${t('matchingHint')}</div>
+                        <div class="muted" style="margin-bottom:8px">Chap va o'ng mos juftliklarni tanlang.</div>
                         <div class="options">
-                            ${(q.leftItems || []).map((left) => `
-                                <div class="row" style="align-items:center; margin-bottom:8px">
-                                    <div style="flex:1; font-weight:600">${escapeHtml(left.text)}</div>
-                                    <div style="flex:1">
-                                        <select data-question-type="matching" data-qid="${q.id}" data-left-id="${escapeHtml(left.id)}" style="width:100%">
-                                            <option value="">${t('matchingSelect')}</option>
-                                            ${(q.rightOptions || []).map((r) => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.text)}</option>`).join('')}
-                                        </select>
+                            ${(q.leftItems || [])
+                                .map(
+                                    (left) => `
+                                    <div class="row" style="align-items:center; margin-bottom:8px">
+                                        <div style="flex:1; font-weight:600">${escapeHtml(left.text)}</div>
+                                        <div style="flex:1">
+                                            <select data-question-type="matching" data-qid="${q.id}" data-left-id="${escapeHtml(left.id)}" style="width:100%">
+                                                <option value="">Tanlang</option>
+                                                ${(q.rightOptions || [])
+                                                    .map((r) => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.text)}</option>`)
+                                                    .join('')}
+                                            </select>
+                                        </div>
                                     </div>
-                                </div>
-                            `).join('')}
+                                `
+                                )
+                                .join('')}
                         </div>
                     </div>
                 `
@@ -416,11 +279,11 @@
             function showTest() {
                 document.getElementById('emailStep').classList.add('hidden')
                 document.getElementById('testStep').classList.remove('hidden')
-                document.getElementById('langSwitcher').style.display = 'none'
 
                 const container = document.getElementById('questionsContainer')
                 container.innerHTML = questions.map(renderQuestionCard).join('')
                 hideFocusWarningModal()
+
                 setupQuestionAnswerHandlers(container)
                 setupNavigationHandlers()
                 setupAntiCheatGuards()
@@ -429,30 +292,31 @@
                 updateProgress()
                 startTimer()
                 startHeartbeat()
-
                 if (tabSwitchCount > 0) {
                     const remaining = Math.max(0, tabSwitchMaxAllowed - tabSwitchCount)
                     if (tabSwitchCount === 1 && remaining >= 1) {
-                        showFocusWarningModal(t('focusPrev1'))
+                        showFocusWarningModal("Avvalgi urinishdan 1 ta chiqish qayd etilgan. Yana bir marta chiqilsa test yakunlanadi.")
                     } else {
-                        showSecurityAlert(t('focusPrev', tabSwitchCount, remaining), 'warn')
+                        showSecurityAlert(`Avvalgi urinishdan ${tabSwitchCount} ta chiqish qayd etilgan. Qolgan limit: ${remaining}.`, 'warn')
                     }
                 }
             }
 
             function setupQuestionAnswerHandlers(container) {
                 if (container.dataset.bound === '1') return
+
                 container.addEventListener('change', (e) => {
-                    const tgt = e.target
-                    const qId = tgt.dataset.qid
+                    const t = e.target
+                    const qId = t.dataset.qid
                     if (!qId) return
-                    if (tgt.dataset.questionType === 'single_choice') {
-                        answers[qId] = tgt.value
-                    } else if (tgt.dataset.questionType === 'multiple_choice') {
+
+                    if (t.dataset.questionType === 'single_choice') {
+                        answers[qId] = t.value
+                    } else if (t.dataset.questionType === 'multiple_choice') {
                         const selected = Array.from(container.querySelectorAll(`input[data-question-type="multiple_choice"][name="q${qId}"]:checked`)).map((el) => el.value)
                         if (selected.length) answers[qId] = selected
                         else delete answers[qId]
-                    } else if (tgt.dataset.questionType === 'matching') {
+                    } else if (t.dataset.questionType === 'matching') {
                         const selected = {}
                         container.querySelectorAll(`select[data-question-type="matching"][data-qid="${qId}"]`).forEach((el) => {
                             if (el.value) selected[el.dataset.leftId] = el.value
@@ -462,15 +326,17 @@
                     }
                     updateProgress()
                 })
+
                 container.addEventListener('input', (e) => {
-                    const tgt = e.target
-                    if (tgt.dataset.questionType !== 'text_input') return
-                    const qId = tgt.dataset.qid
-                    const value = tgt.value.trim()
+                    const t = e.target
+                    if (t.dataset.questionType !== 'text_input') return
+                    const qId = t.dataset.qid
+                    const value = t.value.trim()
                     if (value) answers[qId] = value
                     else delete answers[qId]
                     updateProgress()
                 })
+
                 container.dataset.bound = '1'
             }
 
@@ -479,21 +345,36 @@
                 const prevBtn = document.getElementById('prevQuestionBtn')
                 const nextBtn = document.getElementById('nextQuestionBtn')
                 if (submitBtn.dataset.bound === '1') return
+
                 submitBtn.addEventListener('click', () => submitTest())
                 prevBtn.addEventListener('click', () => {
-                    if (currentQuestionIndex > 0) { currentQuestionIndex -= 1; renderCurrentQuestion(); updateProgress() }
+                    if (currentQuestionIndex > 0) {
+                        currentQuestionIndex -= 1
+                        renderCurrentQuestion()
+                        updateProgress()
+                    }
                 })
                 nextBtn.addEventListener('click', () => {
-                    if (currentQuestionIndex < questions.length - 1) { currentQuestionIndex += 1; renderCurrentQuestion(); updateProgress() }
+                    if (currentQuestionIndex < questions.length - 1) {
+                        currentQuestionIndex += 1
+                        renderCurrentQuestion()
+                        updateProgress()
+                    }
                 })
+
                 submitBtn.dataset.bound = '1'
             }
 
             function renderCurrentQuestion() {
                 const cards = Array.from(document.querySelectorAll('#questionsContainer .question-card'))
-                cards.forEach((card, idx) => card.classList.toggle('hidden', idx !== currentQuestionIndex))
-                document.getElementById('prevQuestionBtn').disabled = currentQuestionIndex <= 0
-                document.getElementById('nextQuestionBtn').disabled = currentQuestionIndex >= cards.length - 1
+                cards.forEach((card, idx) => {
+                    card.classList.toggle('hidden', idx !== currentQuestionIndex)
+                })
+
+                const prevBtn = document.getElementById('prevQuestionBtn')
+                const nextBtn = document.getElementById('nextQuestionBtn')
+                prevBtn.disabled = currentQuestionIndex <= 0
+                nextBtn.disabled = currentQuestionIndex >= cards.length - 1
             }
 
             function isQuestionAnswered(question, answer) {
@@ -508,7 +389,7 @@
             function updateProgress() {
                 const answered = questions.filter((q) => isQuestionAnswered(q, answers[q.id])).length
                 const total = questions.length || 1
-                document.getElementById('answeredInfo').textContent = t('answeredInfo', currentQuestionIndex + 1, questions.length, answered)
+                document.getElementById('answeredInfo').textContent = `${currentQuestionIndex + 1} / ${questions.length} savol • ${answered} / ${questions.length} javob berilgan`
                 document.getElementById('progressFill').style.width = (answered / total) * 100 + '%'
             }
 
@@ -526,7 +407,7 @@
                     if (remaining <= 0) {
                         clearInterval(timerInterval)
                         timerInterval = null
-                        showSecurityAlert(t('timeUp'), 'error')
+                        showSecurityAlert('Vaqt tugadi. Test avtomatik yakunlanadi.', 'error')
                         submitTest({ force: true, skipConfirm: true })
                     }
                 }
@@ -540,7 +421,7 @@
                 const skipConfirm = !!options.skipConfirm
                 const unanswered = questions.filter((q) => !isQuestionAnswered(q, answers[q.id])).length
                 if (!force && unanswered > 0 && !skipConfirm) {
-                    if (!confirm(t('confirmUnanswered', unanswered))) return
+                    if (!confirm(`${unanswered} ta savolga javob bermadingiz. Haqiqatdan yakunlashni xohlaysizmi?`)) return
                 }
                 clearInterval(timerInterval)
                 timerInterval = null
@@ -552,19 +433,19 @@
                     const res = await fetch('/api/test/submit', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ attemptId, attemptToken, answers }),
+                        body: JSON.stringify({ attemptId, attemptToken, answers, lang: localStorage.getItem('lang') || 'uz' }),
                     })
                     const data = await res.json()
                     if (data.success) {
                         showResult(data.data)
                     } else {
-                        alert(t('submitError') + translateServerMsg(data.message))
+                        alert('Xatolik: ' + data.message)
                         document.getElementById('submitTestBtn').disabled = false
                         renderCurrentQuestion()
                         startTimer()
                     }
                 } catch (err) {
-                    alert(t('serverError'))
+                    alert("Server bilan bog'lanib bo'lmadi")
                     document.getElementById('submitTestBtn').disabled = false
                     renderCurrentQuestion()
                     startTimer()
@@ -579,30 +460,39 @@
                 hideFocusWarningModal()
                 stopWatermark()
                 teardownAntiCheatGuards()
-                if (window.kioskBridge && window.kioskBridge.clearAttemptContext) window.kioskBridge.clearAttemptContext()
-
+                if (window.kioskBridge && window.kioskBridge.clearAttemptContext) {
+                    window.kioskBridge.clearAttemptContext()
+                }
                 document.getElementById('testStep').classList.add('hidden')
                 document.getElementById('resultStep').classList.remove('hidden')
                 document.getElementById('scoreBig').textContent = score
                 document.getElementById('scoreTotal').textContent = '/ ' + total
                 document.getElementById('scorePct').textContent = percentage + '%'
 
-                let emoji = '📊', title, msg
-
+                let emoji = 'Yaxshi'
+                let title = 'Ajoyib natija!'
+                let msg = "Natijangiz yuqorida ko'rsatilgan."
                 if (endedByPolicy) {
-                    emoji = '⚠️'; title = t('resultPolicyTitle'); msg = reason || t('resultPolicyMsg')
+                    emoji = 'Diqqat'
+                    title = 'Test avtomatik yakunlandi'
+                    msg = reason || 'Qoidabuzarlik limiti oshdi.'
                 } else if (timedOut) {
-                    emoji = '⏰'; title = t('resultTimeTitle'); msg = t('resultTimeMsg')
+                    emoji = 'Vaqt'
+                    title = 'Vaqt tugadi'
+                    msg = 'Belgilangan vaqt yakunlandi.'
                 } else if (percentage < 50) {
-                    emoji = '📚'; title = t('resultLow'); msg = t('resultMsg')
+                    emoji = 'Past'
+                    title = 'Ko\'proq mashq qiling!'
                 } else if (percentage < 70) {
-                    emoji = '👍'; title = t('resultOk'); msg = t('resultMsg')
+                    emoji = 'Yaxshi'
+                    title = "Yaxshi, lekin yaxshiroq bo'lishi mumkin!"
                 } else if (percentage < 90) {
-                    emoji = '🌟'; title = t('resultGood'); msg = t('resultMsg')
+                    emoji = 'Zo\'r'
+                    title = 'Zo\'r natija!'
                 } else {
-                    emoji = '🏆'; title = t('resultPerfect'); msg = t('resultMsg')
+                    emoji = 'A\'lo'
+                    title = 'Mukammal!'
                 }
-
                 document.getElementById('resultEmoji').textContent = emoji
                 document.getElementById('resultTitle').textContent = title
                 document.getElementById('resultMsg').textContent = msg
@@ -617,11 +507,14 @@
                 el.textContent = message
                 el.className = `security-alert ${level || 'warn'}`
                 if (securityAlertTimeout) clearTimeout(securityAlertTimeout)
-                securityAlertTimeout = setTimeout(() => el.classList.add('hidden'), 4500)
+                securityAlertTimeout = setTimeout(() => {
+                    el.classList.add('hidden')
+                }, 4500)
             }
 
             function showFocusWarningModal(message) {
-                focusWarningText.textContent = message || t('focusWarning')
+                focusWarningText.textContent =
+                    message || "Siz test oynasidan chiqdingiz. Yana bir marta chiqilsa test avtomatik yakunlanadi."
                 focusWarningModal.classList.remove('hidden')
             }
 
@@ -649,11 +542,13 @@
                     if (Number.isInteger(data.data.tabSwitchCount)) tabSwitchCount = data.data.tabSwitchCount
                     if (Number.isInteger(data.data.maxAllowed) && data.data.maxAllowed > 0) tabSwitchMaxAllowed = data.data.maxAllowed
                     if (data.data.autoFinished && data.data.result) {
-                        showSecurityAlert(data.data.result.reason || t('tabLimitDone'), 'error')
+                        showSecurityAlert(data.data.result.reason || 'Qoidabuzarlik limiti oshdi. Test yakunlandi.', 'error')
                         showResult(data.data.result)
                     }
                     return data.data
-                } catch { return null }
+                } catch {
+                    return null
+                }
             }
 
             async function sendHeartbeat() {
@@ -668,11 +563,16 @@
                     if (!data.success) return false
                     heartbeatFailCount = 0
                     return true
-                } catch { return false }
+                } catch {
+                    return false
+                }
             }
 
             function stopHeartbeat() {
-                if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null }
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval)
+                    heartbeatInterval = null
+                }
             }
 
             function startHeartbeat() {
@@ -680,13 +580,15 @@
                 heartbeatFailCount = 0
                 if (!isKioskClient) return
                 sendHeartbeat().catch(() => {})
+
                 heartbeatInterval = setInterval(async () => {
                     if (!isTestActive()) return
                     const ok = await sendHeartbeat()
                     if (ok) return
+
                     heartbeatFailCount += 1
                     if (heartbeatFailCount >= heartbeatFailLimit) {
-                        showSecurityAlert(t('heartbeatLost'), 'error')
+                        showSecurityAlert("Server bilan aloqa uzildi. Test xavfsizlik uchun yakunlanadi.", 'error')
                         await forceFinishByPolicy('kiosk_heartbeat_lost', 'heartbeat-failed')
                     }
                 }, heartbeatIntervalMs)
@@ -699,30 +601,58 @@
                     const res = await fetch('/api/test/force-finish', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ attemptId, attemptToken, reason: reason || 'kiosk_policy', details: details || '' }),
+                        body: JSON.stringify({
+                            attemptId,
+                            attemptToken,
+                            reason: reason || 'kiosk_policy',
+                            details: details || '',
+                        }),
                     })
                     const data = await res.json()
-                    if (data.success && data.data) { showResult(data.data); return }
-                } catch {}
+                    if (data.success && data.data) {
+                        showResult(data.data)
+                        return
+                    }
+                } catch {
+                    // fall through
+                }
                 submitTest({ force: true, skipConfirm: true })
             }
 
             function registerFocusLoss(source) {
                 if (!isTestActive()) return
                 if (shouldThrottleFocusLoss()) return
+
                 const eventType = isKioskClient ? 'kiosk_focus_lost' : 'tab_hidden'
                 const eventDetails = `${isKioskClient ? 'kiosk' : 'web'}-${source}`
+
                 reportSecurityEvent(eventType, eventDetails).then(async (payload) => {
                     if (!isTestActive()) return
                     if (payload && payload.autoFinished) return
+
                     let count = Number.isInteger(payload && payload.tabSwitchCount) ? payload.tabSwitchCount : null
-                    if (!Number.isInteger(count)) { count = tabSwitchCount + 1; tabSwitchCount = count }
+                    if (!Number.isInteger(count)) {
+                        count = tabSwitchCount + 1
+                        tabSwitchCount = count
+                    }
+
                     const remaining = Math.max(0, tabSwitchMaxAllowed - count)
-                    if (count === 1 && remaining >= 1) { showFocusWarningModal(t('focusFirst')); return }
-                    if (remaining > 0) { showSecurityAlert(t('tabLimitWarn', remaining), 'warn'); return }
-                    showSecurityAlert(t('tabLimitDone'), 'error')
-                    if (isKioskClient) await forceFinishByPolicy('kiosk_focus_lost', source)
-                    else submitTest({ force: true, skipConfirm: true })
+                    if (count === 1 && remaining >= 1) {
+                        showFocusWarningModal("Siz test oynasidan birinchi marta chiqdingiz. 2-marta chiqilsa test avtomatik yakunlanadi.")
+                        return
+                    }
+
+                    if (remaining > 0) {
+                        showSecurityAlert(`Diqqat: yana ${remaining} ta imkon qoldi.`, 'warn')
+                        return
+                    }
+
+                    showSecurityAlert('Tab/fokus limiti tugadi. Test yakunlanadi.', 'error')
+                    if (isKioskClient) {
+                        await forceFinishByPolicy('kiosk_focus_lost', source)
+                    } else {
+                        submitTest({ force: true, skipConfirm: true })
+                    }
                 })
             }
 
@@ -736,21 +666,24 @@
                 const now = Date.now()
                 if (now - lastBlurAt < 1200) return
                 lastBlurAt = now
-                if (isKioskClient) { registerFocusLoss('window-blur'); return }
+                if (isKioskClient) {
+                    registerFocusLoss('window-blur')
+                    return
+                }
                 reportSecurityEvent('window_blur', 'window_blur')
             }
 
             function handleCopyCut(e) {
                 if (!isTestActive()) return
                 e.preventDefault()
-                showSecurityAlert(t('copyBlocked'), 'warn')
+                showSecurityAlert('Nusxa olish bloklandi.', 'warn')
                 reportSecurityEvent('copy_block', e.type)
             }
 
             function handleContextMenu(e) {
                 if (!isTestActive()) return
                 e.preventDefault()
-                showSecurityAlert(t('contextBlocked'), 'warn')
+                showSecurityAlert("O'ng tugma menyusi bloklandi.", 'warn')
                 reportSecurityEvent('contextmenu_block', 'contextmenu')
             }
 
@@ -764,18 +697,23 @@
             function handleShortcutBlock(e) {
                 if (!isTestActive()) return
                 const key = String(e.key || '').toLowerCase()
+
                 if (e.key === 'PrintScreen') {
                     e.preventDefault()
-                    showSecurityAlert(t('printscreenBlocked'), 'warn')
+                    showSecurityAlert('PrintScreen urinishi loglandi.', 'warn')
                     reportSecurityEvent('printscreen_block', 'printscreen')
-                    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText('').catch(() => {})
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText('').catch(() => {})
+                    }
                     return
                 }
+
                 if (!(e.ctrlKey || e.metaKey)) return
                 if (!BLOCKED_SHORTCUTS.has(key)) return
                 if (isEditableTarget(e.target) && (key === 'a' || key === 'c' || key === 'x')) return
+
                 e.preventDefault()
-                showSecurityAlert(t('shortcutBlocked'), 'warn')
+                showSecurityAlert('Ushbu klaviatura kombinatsiyasi bloklandi.', 'warn')
                 reportSecurityEvent('shortcut_block', `ctrl/meta+${key}`)
             }
 
@@ -805,7 +743,11 @@
 
             function renderWatermark() {
                 const wm = document.getElementById('examWatermark')
-                if (!activeStudent) { wm.classList.add('hidden'); wm.innerHTML = ''; return }
+                if (!activeStudent) {
+                    wm.classList.add('hidden')
+                    wm.innerHTML = ''
+                    return
+                }
                 const stamp = formatDateTime(new Date())
                 const label = `${activeStudent.full_name} | ${activeStudent.email} | ${stamp}`
                 const lines = []
@@ -824,7 +766,10 @@
             }
 
             function stopWatermark() {
-                if (watermarkInterval) { clearInterval(watermarkInterval); watermarkInterval = null }
+                if (watermarkInterval) {
+                    clearInterval(watermarkInterval)
+                    watermarkInterval = null
+                }
                 const wm = document.getElementById('examWatermark')
                 wm.innerHTML = ''
                 wm.classList.add('hidden')
@@ -832,14 +777,25 @@
 
             function formatDateTime(value) {
                 try {
-                    return new Intl.DateTimeFormat('uz-UZ', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(value)
-                } catch { return String(value) }
+                    return new Intl.DateTimeFormat('uz-UZ', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false,
+                    }).format(value)
+                } catch {
+                    return String(value)
+                }
             }
 
             function setupKioskBridgeListeners() {
                 if (!window.kioskBridge || typeof window.kioskBridge.onHostPolicyFinish !== 'function') return
                 if (setupKioskBridgeListeners.bound) return
                 setupKioskBridgeListeners.bound = true
+
                 window.kioskBridge.onHostPolicyFinish(async (payload) => {
                     if (!isTestActive()) return
                     const reason = payload && payload.reason ? payload.reason : 'kiosk_host_force_finish'
@@ -850,59 +806,16 @@
             setupKioskBridgeListeners.bound = false
             setupKioskBridgeListeners()
 
-            // Server xabarlarini tarjima qilish lug'ati
-            const SERVER_MSG_RU = {
-                // Ro'yxatdan o'tish
-                "Barcha maydonlarni to`ldiring": "Заполните все поля",
-                "Kurs qiymati noto`g`ri": "Неверное значение курса",
-                "Email formati noto`g`ri": "Неверный формат email",
-                "Telefon raqam formati noto`g`ri": "Неверный формат номера телефона",
-                "Bu email allaqachon ro`yxatdan o`tgan": "Этот email уже зарегистрирован",
-                "Muvaffaqiyatli ro`yxatdan o`tdingiz!": "Вы успешно зарегистрировались!",
-                // Test boshlash
-                "Email kiriting": "Введите email",
-                "Bu email ro'yxatdan o'tmagan. Avval ro'yxatdan o'ting.": "Этот email не зарегистрирован. Сначала зарегистрируйтесь.",
-                "Hozircha savollar yo'q. Tashkilotchi bilan bog'laning.": "Вопросов пока нет. Свяжитесь с организатором.",
-                "Siz testni allaqachon topshirgansiz.": "Вы уже прошли тест.",
-                // Test jarayoni
-                "Savollar tartibi buzilgan. Testni qayta boshlang.": "Порядок вопросов нарушен. Начните тест заново.",
-                "Savollar yangilangan. Testni qaytadan boshlang.": "Вопросы обновлены. Начните тест заново.",
-                "Test natijasi allaqachon saqlangan": "Результат теста уже сохранён",
-                "Test allaqachon topshirilgan": "Тест уже был сдан",
-                "Urinish topilmadi": "Попытка не найдена",
-                "Urinish tokeni yaroqsiz": "Токен попытки недействителен",
-                "Test allaqachon yakunlangan": "Тест уже завершён",
-                "Urinish holati yangilangan, testni qayta tekshiring.": "Состояние попытки изменилось, проверьте тест.",
-                "Savollar topilmadi": "Вопросы не найдены",
-                "Savollar tartibi buzilgan": "Порядок вопросов нарушен",
-                // Umumiy
-                "Server xatosi": "Ошибка сервера",
-                "Noto`g`ri ma'lumot": "Неверные данные",
-                // Rate limit
-                "Ro`yxatdan o`tish so`rovlari ko`payib ketdi. Keyinroq qayta urinib ko`ring.": "Слишком много запросов на регистрацию. Попробуйте позже.",
-                "Testni boshlash so`rovlari ko`payib ketdi. Keyinroq urinib ko`ring.": "Слишком много запросов на начало теста. Попробуйте позже.",
-                "Juda ko`p yakunlash so`rovi yuborildi. Keyinroq urinib ko`ring.": "Слишком много запросов на завершение. Попробуйте позже.",
-            }
-
-            function translateServerMsg(msg) {
-                if (!msg) return msg
-                if (currentLang !== 'ru') return msg
-                // To'liq moslik
-                if (SERVER_MSG_RU[msg]) return SERVER_MSG_RU[msg]
-                // Qisman moslik (masalan "Siz testni allaqachon topshirgansiz. Natijangiz: 5/30")
-                for (const [uz, ru] of Object.entries(SERVER_MSG_RU)) {
-                    if (msg.startsWith(uz)) return ru + msg.slice(uz.length)
-                }
-                return msg
-            }
-
             function escapeHtml(str) {
                 return String(str || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
             }
 
             window.addEventListener('beforeunload', (e) => {
                 if (isTestActive()) {
-                    if (isKioskClient) { reportSecurityEvent('kiosk_app_closed', 'beforeunload'); return }
+                    if (isKioskClient) {
+                        reportSecurityEvent('kiosk_app_closed', 'beforeunload')
+                        return
+                    }
                     e.preventDefault()
                     e.returnValue = ''
                 }
@@ -910,3 +823,4 @@
         </script>
     </body>
 </html>
+

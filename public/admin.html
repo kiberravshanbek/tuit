@@ -126,9 +126,19 @@
                 </div>
                 <form id="questionForm" class="form">
                     <input type="hidden" id="qId" />
-                    <div class="field">
-                        <label>Savol matni</label>
-                        <input type="text" id="qText" required />
+                    <div style="background:#f0f4ff;border-radius:8px;padding:12px;margin-bottom:8px">
+                        <div style="font-weight:600;margin-bottom:8px;color:#1e3a8a">🇺🇿 O'zbek tili</div>
+                        <div class="field">
+                            <label>Savol matni (UZ)</label>
+                            <input type="text" id="qTextUz" required placeholder="O'zbek tilidagi savol..." />
+                        </div>
+                    </div>
+                    <div style="background:#fff0f0;border-radius:8px;padding:12px;margin-bottom:8px">
+                        <div style="font-weight:600;margin-bottom:8px;color:#8b0000">🇷🇺 Rus tili</div>
+                        <div class="field">
+                            <label>Savol matni (RU)</label>
+                            <input type="text" id="qTextRu" required placeholder="Вопрос на русском языке..." />
+                        </div>
                     </div>
                     <div class="field">
                         <label>Savol turi</label>
@@ -141,13 +151,27 @@
                     </div>
 
                     <div id="choiceFields">
-                        <div class="row">
-                            <div class="field"><label>A varianti</label><input type="text" id="qA" /></div>
-                            <div class="field"><label>B varianti</label><input type="text" id="qB" /></div>
+                        <div style="background:#f0f4ff;border-radius:8px;padding:10px;margin-bottom:6px">
+                            <div style="font-weight:600;font-size:13px;margin-bottom:6px;color:#1e3a8a">🇺🇿 Variantlar (UZ)</div>
+                            <div class="row">
+                                <div class="field"><label>A (UZ)</label><input type="text" id="qAuz" /></div>
+                                <div class="field"><label>B (UZ)</label><input type="text" id="qBuz" /></div>
+                            </div>
+                            <div class="row">
+                                <div class="field"><label>C (UZ)</label><input type="text" id="qCuz" /></div>
+                                <div class="field"><label>D (UZ)</label><input type="text" id="qDuz" /></div>
+                            </div>
                         </div>
-                        <div class="row">
-                            <div class="field"><label>C varianti</label><input type="text" id="qC" /></div>
-                            <div class="field"><label>D varianti</label><input type="text" id="qD" /></div>
+                        <div style="background:#fff0f0;border-radius:8px;padding:10px;margin-bottom:6px">
+                            <div style="font-weight:600;font-size:13px;margin-bottom:6px;color:#8b0000">🇷🇺 Варианты (RU)</div>
+                            <div class="row">
+                                <div class="field"><label>A (RU)</label><input type="text" id="qAru" /></div>
+                                <div class="field"><label>B (RU)</label><input type="text" id="qBru" /></div>
+                            </div>
+                            <div class="row">
+                                <div class="field"><label>C (RU)</label><input type="text" id="qCru" /></div>
+                                <div class="field"><label>D (RU)</label><input type="text" id="qDru" /></div>
+                            </div>
                         </div>
                     </div>
 
@@ -173,13 +197,17 @@
                     </div>
 
                     <div class="field hidden" id="textAnswerField">
-                        <label>Qabul qilinadigan javoblar (har qatorda bitta)</label>
-                        <textarea id="qAcceptedAnswers" rows="5" placeholder="Masalan:&#10;802.11&#10;IEEE 802.11"></textarea>
+                        <label>🇺🇿 Qabul qilinadigan javoblar (UZ, har qatorda bitta)</label>
+                        <textarea id="qAcceptedAnswersUz" rows="3" placeholder="Masalan:&#10;802.11&#10;IEEE 802.11"></textarea>
+                        <label style="margin-top:8px;display:block">🇷🇺 Принимаемые ответы (RU, каждый с новой строки)</label>
+                        <textarea id="qAcceptedAnswersRu" rows="3" placeholder="Например:&#10;802.11&#10;IEEE 802.11"></textarea>
                     </div>
 
                     <div class="field hidden" id="matchingField">
-                        <label>Moslashtirish juftliklari (har qatorda: chap | o'ng)</label>
-                        <textarea id="qMatchingPairs" rows="6" placeholder="Wi-Fi | 802.11&#10;Bluetooth | 2.4 GHz"></textarea>
+                        <label>🇺🇿 Moslashtirish juftliklari (UZ: chap | o'ng)</label>
+                        <textarea id="qMatchingPairsUz" rows="4" placeholder="Wi-Fi | 802.11&#10;Bluetooth | 2.4 GHz"></textarea>
+                        <label style="margin-top:8px;display:block">🇷🇺 Пары соответствия (RU: лево | право)</label>
+                        <textarea id="qMatchingPairsRu" rows="4" placeholder="Wi-Fi | 802.11&#10;Bluetooth | 2.4 ГГц"></textarea>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-ghost" onclick="closeModal()">Bekor</button>
@@ -293,11 +321,13 @@
                 document.getElementById('textAnswerField').classList.toggle('hidden', !isText)
                 document.getElementById('matchingField').classList.toggle('hidden', !isMatching)
 
-                ;['qA', 'qB', 'qC', 'qD'].forEach((id) => {
+                ;['qAuz','qBuz','qCuz','qDuz','qAru','qBru','qCru','qDru'].forEach((id) => {
                     document.getElementById(id).required = isChoice
                 })
-                document.getElementById('qAcceptedAnswers').required = isText
-                document.getElementById('qMatchingPairs').required = isMatching
+                document.getElementById('qAcceptedAnswersUz').required = isText
+                document.getElementById('qAcceptedAnswersRu').required = isText
+                document.getElementById('qMatchingPairsUz').required = isMatching
+                document.getElementById('qMatchingPairsRu').required = isMatching
             }
 
             async function loadQuestions() {
@@ -329,24 +359,26 @@
             function openQuestionModal(q = null) {
                 document.getElementById('modalTitle').textContent = q ? 'Savolni tahrirlash' : 'Yangi savol'
                 document.getElementById('qId').value = q ? q.id : ''
-                document.getElementById('qText').value = q ? q.text : ''
+                document.getElementById('qTextUz').value = q ? (q.text_uz || q.text || '') : ''
+                document.getElementById('qTextRu').value = q ? (q.text_ru || '') : ''
                 document.getElementById('qType').value = q ? q.question_type : 'single_choice'
-                document.getElementById('qA').value = q ? q.option_a || '' : ''
-                document.getElementById('qB').value = q ? q.option_b || '' : ''
-                document.getElementById('qC').value = q ? q.option_c || '' : ''
-                document.getElementById('qD').value = q ? q.option_d || '' : ''
+                document.getElementById('qAuz').value = q ? q.option_a_uz || q.option_a || '' : ''
+                document.getElementById('qBuz').value = q ? q.option_b_uz || q.option_b || '' : ''
+                document.getElementById('qCuz').value = q ? q.option_c_uz || q.option_c || '' : ''
+                document.getElementById('qDuz').value = q ? q.option_d_uz || q.option_d || '' : ''
+                document.getElementById('qAru').value = q ? q.option_a_ru || '' : ''
+                document.getElementById('qBru').value = q ? q.option_b_ru || '' : ''
+                document.getElementById('qCru').value = q ? q.option_c_ru || '' : ''
+                document.getElementById('qDru').value = q ? q.option_d_ru || '' : ''
                 document.getElementById('qCorrectSingle').value = q ? q.correct_option || '' : ''
                 document.querySelectorAll('.radio-btn').forEach((b) => b.classList.toggle('active', q && b.dataset.value === (q.correct_option || '')))
-
                 ;['A', 'B', 'C', 'D'].forEach((letter) => {
                     document.getElementById('qMulti' + letter).checked = q ? (q.correct_options || []).includes(letter) : false
                 })
-
-                document.getElementById('qAcceptedAnswers').value = q && Array.isArray(q.accepted_answers) ? q.accepted_answers.join('\n') : ''
-                document.getElementById('qMatchingPairs').value =
-                    q && Array.isArray(q.matching_pairs)
-                        ? q.matching_pairs.map((p) => `${p.left} | ${p.right}`).join('\n')
-                        : ''
+                document.getElementById('qAcceptedAnswersUz').value = q && Array.isArray(q.accepted_answers_uz) ? q.accepted_answers_uz.join('\n') : (q && Array.isArray(q.accepted_answers) ? q.accepted_answers.join('\n') : '')
+                document.getElementById('qAcceptedAnswersRu').value = q && Array.isArray(q.accepted_answers_ru) ? q.accepted_answers_ru.join('\n') : ''
+                document.getElementById('qMatchingPairsUz').value = q && Array.isArray(q.matching_pairs) ? q.matching_pairs.map(p => (p.left_uz||p.left)+' | '+(p.right_uz||p.right)).join('\n') : ''
+                document.getElementById('qMatchingPairsRu').value = q && Array.isArray(q.matching_pairs) ? q.matching_pairs.map(p => (p.left_ru||p.left_uz||p.left)+' | '+(p.right_ru||p.right_uz||p.right)).join('\n') : ''
 
                 toggleQuestionFields(document.getElementById('qType').value)
                 document.getElementById('questionModal').classList.remove('hidden')
@@ -392,45 +424,45 @@
                 e.preventDefault()
                 const id = document.getElementById('qId').value
                 const payload = {
-                    text: document.getElementById('qText').value,
+                    text_uz: document.getElementById('qTextUz').value,
+                    text_ru: document.getElementById('qTextRu').value,
                     question_type: document.getElementById('qType').value,
                 }
+                if (!payload.text_uz) return alert("O'zbek tilidagi savol matnini kiriting")
+                if (!payload.text_ru) return alert("Rus tilidagi savol matnini kiriting")
 
                 if (payload.question_type === 'single_choice' || payload.question_type === 'multiple_choice') {
-                    payload.option_a = document.getElementById('qA').value
-                    payload.option_b = document.getElementById('qB').value
-                    payload.option_c = document.getElementById('qC').value
-                    payload.option_d = document.getElementById('qD').value
+                    payload.option_a_uz = document.getElementById('qAuz').value
+                    payload.option_b_uz = document.getElementById('qBuz').value
+                    payload.option_c_uz = document.getElementById('qCuz').value
+                    payload.option_d_uz = document.getElementById('qDuz').value
+                    payload.option_a_ru = document.getElementById('qAru').value
+                    payload.option_b_ru = document.getElementById('qBru').value
+                    payload.option_c_ru = document.getElementById('qCru').value
+                    payload.option_d_ru = document.getElementById('qDru').value
                 }
-
                 if (payload.question_type === 'single_choice') {
                     payload.correct_option = document.getElementById('qCorrectSingle').value
                     if (!payload.correct_option) return alert("To'g'ri javobni tanlang")
                 } else if (payload.question_type === 'multiple_choice') {
-                    payload.correct_options = ['A', 'B', 'C', 'D'].filter((letter) => document.getElementById('qMulti' + letter).checked)
+                    payload.correct_options = ['A','B','C','D'].filter(l => document.getElementById('qMulti'+l).checked)
                     if (!payload.correct_options.length) return alert("Kamida bitta to'g'ri javobni tanlang")
                 } else if (payload.question_type === 'text_input') {
-                    payload.accepted_answers = document
-                        .getElementById('qAcceptedAnswers')
-                        .value.split(/\r?\n/)
-                        .map((x) => x.trim())
-                        .filter(Boolean)
-                    if (!payload.accepted_answers.length) return alert("Kamida bitta to'g'ri javob matnini kiriting")
+                    payload.accepted_answers_uz = document.getElementById('qAcceptedAnswersUz').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)
+                    payload.accepted_answers_ru = document.getElementById('qAcceptedAnswersRu').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)
+                    if (!payload.accepted_answers_uz.length) return alert("O'zbek tilidagi javoblarni kiriting")
+                    if (!payload.accepted_answers_ru.length) return alert("Rus tilidagi javoblarni kiriting")
                 } else if (payload.question_type === 'matching') {
-                    payload.matching_pairs = document
-                        .getElementById('qMatchingPairs')
-                        .value.split(/\r?\n/)
-                        .map((line) => line.trim())
-                        .filter(Boolean)
-                        .map((line) => {
-                            const [left, ...rest] = line.split('|')
-                            return { left: (left || '').trim(), right: rest.join('|').trim() }
-                        })
-                        .filter((p) => p.left && p.right)
-
-                    if (payload.matching_pairs.length < 2) {
-                        return alert("Moslashtirish uchun kamida 2 ta juftlik kiriting (masalan: Wi-Fi | 802.11)")
-                    }
+                    const parseP = (text) => text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{const[a,...b]=l.split('|');return{left:(a||'').trim(),right:b.join('|').trim()}}).filter(p=>p.left&&p.right)
+                    const pUz = parseP(document.getElementById('qMatchingPairsUz').value)
+                    const pRu = parseP(document.getElementById('qMatchingPairsRu').value)
+                    if (pUz.length < 2) return alert("O'zbek tilida kamida 2 ta juftlik kiriting (masalan: Wi-Fi | 802.11)")
+                    if (pRu.length < 2) return alert("Rus tilida kamida 2 ta juftlik kiriting")
+                    payload.matching_pairs = pUz.map((p,i) => ({
+                        left_uz: p.left, right_uz: p.right,
+                        left_ru: (pRu[i]||pUz[i]).left, right_ru: (pRu[i]||pUz[i]).right,
+                        left: p.left, right: p.right
+                    }))
                 }
 
                 const url = id ? '/api/admin/questions/' + id : '/api/admin/questions'
