@@ -8,4 +8,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: SQLITE_DB_PATH
+        value: /data/olimpiada.db
+    disk:
+      name: olimpiada-data
+      mountPath: /data
+      sizeGB: 1
     autoDeploy: true
