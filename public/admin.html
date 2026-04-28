@@ -263,14 +263,14 @@
                             <td><a href="mailto:${escapeHtml(s.email)}">${escapeHtml(s.email)}</a></td>
                             <td>${escapeHtml(s.phone)}</td>
                             <td class="muted">${escapeHtml(s.created_at)}</td>
-                            <td><button class="btn-icon" onclick="deleteStudent(${s.id})">🗑️</button></td>
+                            <td><button class="btn-icon" onclick='deleteStudent(${JSON.stringify(String(s.id || ""))})'>🗑️</button></td>
                         </tr>`)
                     .join('')
             }
 
             async function deleteStudent(id) {
                 if (!confirm("O'chirishni tasdiqlaysizmi?")) return
-                await fetch('/api/students/' + id, { method: 'DELETE' })
+                await fetch('/api/students/' + encodeURIComponent(id), { method: 'DELETE' })
                 loadStudents()
             }
 
@@ -388,15 +388,15 @@
 
             async function deleteQuestion(id) {
                 if (!confirm("Savolni o'chirishni tasdiqlaysizmi?")) return
-                await fetch('/api/admin/questions/' + id, { method: 'DELETE' })
+                await fetch('/api/admin/questions/' + encodeURIComponent(id), { method: 'DELETE' })
                 loadQuestions()
             }
 
             document.getElementById('questionsTable').addEventListener('click', (e) => {
                 const btn = e.target.closest('button[data-action]')
                 if (!btn) return
-                const id = Number(btn.dataset.id)
-                if (!Number.isInteger(id) || id <= 0) return
+                const id = String(btn.dataset.id || '').trim()
+                if (!id) return
 
                 if (btn.dataset.action === 'edit-question') {
                     const question = allQuestions.find((q) => q.id === id)
