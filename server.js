@@ -6,6 +6,9 @@ const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, Headin
 const path = require('path')
 const multer = require('multer')
 const crypto = require('crypto')
+const { createCanvas, loadImage } = require('@napi-rs/canvas')
+const QRCode = require('qrcode')
+const archiver = require('archiver')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -47,6 +50,12 @@ const registerRequests = new Map(), testStartRequests = new Map(), testSubmitReq
 const CLIENT_MODES = new Set(['web','kiosk'])
 const SECURITY_EVENT_TYPES = new Set(['tab_hidden','window_blur','copy_block','contextmenu_block','shortcut_block','printscreen_block','kiosk_focus_lost','kiosk_app_closed','kiosk_heartbeat_lost','kiosk_host_force_finish'])
 const FORCE_FINISH_REASONS = new Set(['kiosk_focus_lost','kiosk_app_closed','kiosk_heartbeat_lost','kiosk_host_force_finish','kiosk_policy'])
+const CERT_WIDTH = 1600, CERT_HEIGHT = 1131
+const CERT_THEMES = [
+    { bg: '#F8FAFC', primary: '#1E3A8A', accent: '#0F172A', highlight: '#E0E7FF' },
+    { bg: '#F0FDF4', primary: '#065F46', accent: '#052E16', highlight: '#DCFCE7' },
+    { bg: '#FFF7ED', primary: '#9A3412', accent: '#7C2D12', highlight: '#FFEDD5' },
+]
 
 if (IS_PROD) {
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASS) throw new Error('ADMIN_USER va ADMIN_PASS majburiy.')
@@ -80,7 +89,7 @@ const TestResult = mongoose.model('TestResult', new mongoose.Schema({
     question_order: [mongoose.Schema.Types.ObjectId],
     attempt_token_hash: String, tab_switch_count: { type: Number, default: 0 },
     security_events_json: mongoose.Schema.Types.Mixed,
-    client_mode: String, last_heartbeat_at: Date, ended_reason: String,
+    client_mode: String, test_lang: String, last_heartbeat_at: Date, ended_reason: String,
     started_at: { type: Date, default: Date.now }, finished_at: Date,
 }))
 
@@ -103,6 +112,192 @@ const normMode = (v) => { const m=nt(String(v||'').toLowerCase(),12); return CLI
 const normLang = (v) => { const l=nt(String(v||'').toLowerCase(),5); return VALID_LANGS.has(l)?l:'uz' }
 const normFree = (v) => nt(String(v||''),MAX_OPTION_LEN).replace(/\s+/g,' ').toLowerCase()
 const getLT = (v, lang) => { if (!v) return ''; if (typeof v==='string') return v; if (isObj(v)) return String(v[lang]||v['uz']||Object.values(v)[0]||''); return String(v) }
+const parseVariant = (v) => { const n = Number.parseInt(v,10); return Number.isInteger(n) && n >= 1 && n <= CERT_THEMES.length ? n : 1 }
+const formatDate = (v) => { if (!v) return ''; const d = new Date(v); if (Number.isNaN(d.getTime())) return ''; return d.toISOString().slice(0,10) }
+const slugify = (v) => { const s = nt(String(v||''),80).toLowerCase(); const out = s.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); return out || 'sertifikat' }
+const escapeHtml = (v) => String(v||'').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+
+function wrapText(ctx, text, maxWidth) {
+    const words = String(text||'').split(/\s+/).filter(Boolean)
+    const lines = []
+    let line = ''
+    for (const word of words) {
+        const test = line ? `${line} ${word}` : word
+        if (ctx.measureText(test).width <= maxWidth) { line = test; continue }
+        if (line) lines.push(line)
+        line = word
+    }
+    if (line) lines.push(line)
+    return lines
+}
+
+function drawParagraph(ctx, text, x, y, maxWidth, lineHeight, align='center') {
+    const lines = Array.isArray(text) ? text : wrapText(ctx, text, maxWidth)
+    ctx.textAlign = align
+    lines.forEach((line, idx) => ctx.fillText(line, x, y + idx * lineHeight))
+    return y + lines.length * lineHeight
+}
+
+function drawCertificateBackground(ctx, theme, variant) {
+    ctx.fillStyle = theme.bg
+    ctx.fillRect(0, 0, CERT_WIDTH, CERT_HEIGHT)
+    ctx.save()
+    ctx.globalAlpha = 0.12
+    ctx.fillStyle = theme.highlight
+    if (variant === 1) {
+        ctx.fillRect(0, 0, CERT_WIDTH, 160)
+        ctx.fillRect(0, CERT_HEIGHT - 120, CERT_WIDTH, 120)
+    } else if (variant === 2) {
+        ctx.fillRect(0, 0, 180, CERT_HEIGHT)
+        ctx.fillRect(CERT_WIDTH - 120, 0, 120, CERT_HEIGHT)
+    } else {
+        ctx.beginPath()
+        ctx.moveTo(0, 0)
+        ctx.lineTo(CERT_WIDTH, 0)
+        ctx.lineTo(CERT_WIDTH, 220)
+        ctx.closePath()
+        ctx.fill()
+        ctx.beginPath()
+        ctx.moveTo(0, CERT_HEIGHT)
+        ctx.lineTo(0, CERT_HEIGHT - 220)
+        ctx.lineTo(CERT_WIDTH, CERT_HEIGHT)
+        ctx.closePath()
+        ctx.fill()
+    }
+    ctx.restore()
+    ctx.strokeStyle = theme.primary
+    ctx.lineWidth = 6
+    ctx.strokeRect(40, 40, CERT_WIDTH - 80, CERT_HEIGHT - 80)
+    ctx.strokeStyle = theme.accent
+    ctx.lineWidth = 2
+    ctx.strokeRect(60, 60, CERT_WIDTH - 120, CERT_HEIGHT - 120)
+}
+
+function getCertCopy(lang, student, result) {
+    const name = nt(student.full_name, 120) || (lang === 'ru' ? 'Участник' : 'Ishtirokchi')
+    const direction = nt(student.direction, 120)
+    const course = nt(student.course, 40)
+    const date = formatDate(result.finished_at || result.started_at)
+    if (lang === 'ru') {
+        return {
+            name,
+            title: 'СЕРТИФИКАТ',
+            subtitle: 'Участник олимпиады',
+            body: [
+                'Настоящий сертификат выдан за участие в олимпиаде',
+                'по дисциплине «Беспроводные сети», проведенной на кафедре',
+                '«Мобильные технологии связи» факультета радио и мобильной связи',
+                'Ташкентского университета информационных технологий',
+                'имени Мухаммада аль-Хоразмий.'
+            ],
+            fieldLine: `Направление: ${direction || '-'}   Курс: ${course || '-'}   Дата: ${date || '-'}`,
+            footerLabel: 'Заведующий кафедрой «Мобильные технологии связи»',
+            footerName: 'Хайруллаев Алишер Файзулла угли',
+            qrLabel: 'Проверка по QR'
+        }
+    }
+    return {
+        name,
+        title: 'SERTIFIKAT',
+        subtitle: 'Olimpiada ishtirokchisi',
+        body: [
+            'Ushbu sertifikat Muhammad al-Xorazmiy nomidagi',
+            'Toshkent Axborot Texnologiyalari Universiteti',
+            'Radio va mobil aloqa fakulteti Mobil aloqa texnologiyalari',
+            'kafedrasida o\'tkazilgan "Simsiz tarmoqlar" fanidan',
+            'olimpiadada qatnashganligi uchun berildi.'
+        ],
+        fieldLine: `Yo'nalish: ${direction || '-'}   Kurs: ${course || '-'}   Sana: ${date || '-'}`,
+        footerLabel: 'Mobil aloqa texnologiyalari kafedra mudiri',
+        footerName: "Xayrullayev Alisher Fayzulla o'g'li",
+        qrLabel: 'QR orqali tekshirish'
+    }
+}
+
+async function renderCertificatePng({ student, result, lang, variant, verifyUrl }) {
+    const theme = CERT_THEMES[(variant - 1) % CERT_THEMES.length]
+    const canvas = createCanvas(CERT_WIDTH, CERT_HEIGHT)
+    const ctx = canvas.getContext('2d')
+    drawCertificateBackground(ctx, theme, variant)
+
+    const copy = getCertCopy(lang, student, result)
+    const centerX = CERT_WIDTH / 2
+
+    ctx.fillStyle = theme.primary
+    ctx.textAlign = 'center'
+    ctx.font = 'bold 72px "Times New Roman"'
+    ctx.fillText(copy.title, centerX, 150)
+    ctx.font = '26px Arial'
+    ctx.fillStyle = theme.accent
+    ctx.fillText(copy.subtitle, centerX, 190)
+
+    ctx.font = 'bold 54px "Times New Roman"'
+    ctx.fillStyle = theme.accent
+    ctx.fillText(copy.name, centerX, 300)
+
+    ctx.strokeStyle = theme.primary
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(260, 320)
+    ctx.lineTo(CERT_WIDTH - 260, 320)
+    ctx.stroke()
+
+    ctx.font = '28px Arial'
+    ctx.fillStyle = theme.accent
+    let y = 380
+    const maxWidth = CERT_WIDTH - 240
+    for (const paragraph of copy.body) {
+        y = drawParagraph(ctx, paragraph, centerX, y, maxWidth, 36)
+        y += 8
+    }
+
+    ctx.font = '24px Arial'
+    y += 12
+    y = drawParagraph(ctx, copy.fieldLine, centerX, y, maxWidth, 32)
+
+    const footerY = CERT_HEIGHT - 170
+    ctx.textAlign = 'left'
+    ctx.font = '20px Arial'
+    ctx.fillStyle = theme.accent
+    ctx.fillText(copy.footerLabel, 120, footerY)
+    ctx.font = 'bold 22px Arial'
+    ctx.fillText(copy.footerName, 120, footerY + 28)
+    ctx.strokeStyle = theme.primary
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(120, footerY + 42)
+    ctx.lineTo(520, footerY + 42)
+    ctx.stroke()
+
+    ctx.font = '16px Arial'
+    ctx.fillStyle = theme.accent
+    ctx.fillText(`ID: ${result._id}`, 120, CERT_HEIGHT - 70)
+
+    const qrData = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 240 })
+    const qrImg = await loadImage(qrData)
+    const qrX = CERT_WIDTH - 340
+    const qrY = CERT_HEIGHT - 330
+    ctx.drawImage(qrImg, qrX, qrY, 220, 220)
+    ctx.textAlign = 'center'
+    ctx.font = '18px Arial'
+    ctx.fillStyle = theme.accent
+    ctx.fillText(copy.qrLabel, qrX + 110, qrY + 245)
+
+    return canvas.toBuffer('image/png')
+}
+
+async function getCertificateRecord(id) {
+    let result
+    try {
+        result = await TestResult.findById(id)
+            .populate('student_id', 'full_name direction course email phone')
+            .lean()
+    } catch {
+        return null
+    }
+    if (!result || !result.finished_at || !result.student_id) return null
+    return result
+}
 
 function requireSameOrigin(req, res, next) {
     const host = String(req.get('host')||'')
@@ -319,7 +514,7 @@ app.post('/api/test/start',requireSameOrigin,limitStart,async(req,res)=>{
         const selected=TEST_QUESTION_COUNT>0?shuffled.slice(0,Math.min(TEST_QUESTION_COUNT,shuffled.length)):shuffled
         let attempt=await TestResult.findOne({student_id:student._id,finished_at:null})
         if (!attempt) {
-            attempt=await TestResult.create({student_id:student._id,total:selected.length,question_order:selected.map(q=>q.id),attempt_token_hash:null})
+            attempt=await TestResult.create({student_id:student._id,total:selected.length,question_order:selected.map(q=>q.id),attempt_token_hash:null,test_lang:lang})
         } else {
             if (Date.now()-new Date(attempt.started_at).getTime()>TEST_DURATION_MIN*60*1000) {
                 await TestResult.findByIdAndUpdate(attempt._id,{finished_at:new Date(),score:0,attempt_token_hash:null,ended_reason:'time_expired_before_resume'})
@@ -327,7 +522,7 @@ app.post('/api/test/start',requireSameOrigin,limitStart,async(req,res)=>{
             }
         }
         const tok=genTok(),tokHash=hashTok(tok)
-        const upd={attempt_token_hash:tokHash,client_mode:mode}
+        const upd={attempt_token_hash:tokHash,client_mode:mode,test_lang:lang}
         if (mode==='kiosk') upd.last_heartbeat_at=new Date(); else upd.last_heartbeat_at=null
         await TestResult.findByIdAndUpdate(attempt._id,upd)
         const ref=await TestResult.findById(attempt._id)
@@ -413,6 +608,7 @@ app.post('/api/test/submit',requireSameOrigin,limitSubmit,async(req,res)=>{
         if (!attempt.attempt_token_hash) return res.status(403).json({success:false,message:'Urinish tokeni yaroqsiz'})
         const tHash=hashTok(tok)
         if (!safeCmp(attempt.attempt_token_hash,tHash)) return res.status(403).json({success:false,message:'Urinish tokeni yaroqsiz'})
+        const testLang = attempt.test_lang || lang
         const timedOut=Date.now()-new Date(attempt.started_at).getTime()>(TEST_DURATION_MIN+1)*60*1000
         const order=Array.isArray(attempt.question_order)?attempt.question_order:[]
         if (!order.length) return res.status(400).json({success:false,message:'Savollar tartibi buzilgan'})
@@ -422,7 +618,7 @@ app.post('/api/test/submit',requireSameOrigin,limitSubmit,async(req,res)=>{
         const cleaned={};let score=0
         for (const qId of order) { const q=byId.get(String(qId)); if (!q) continue; const raw=answers[String(qId)]; const norm=normAnswer(q,raw); if (norm!==null) cleaned[String(qId)]=norm; if (isCorrect(q,norm,lang)) score++ }
         if (timedOut) score=0
-        if (!await TestResult.findOneAndUpdate({_id:attempt._id,finished_at:null,attempt_token_hash:tHash},{score,answers_json:cleaned,finished_at:new Date(),attempt_token_hash:null,ended_reason:timedOut?'time_expired':'submitted'})) return res.status(409).json({success:false,message:'Test natijasi allaqachon saqlangan'})
+        if (!await TestResult.findOneAndUpdate({_id:attempt._id,finished_at:null,attempt_token_hash:tHash},{score,answers_json:cleaned,finished_at:new Date(),attempt_token_hash:null,ended_reason:timedOut?'time_expired':'submitted',test_lang:testLang})) return res.status(409).json({success:false,message:'Test natijasi allaqachon saqlangan'})
         return res.json({success:true,data:{score,total:attempt.total,percentage:attempt.total?Math.round((score/attempt.total)*100):0,timedOut}})
     } catch(err){console.error(err);return res.status(500).json({success:false,message:'Server xatosi'})}
 })
@@ -462,7 +658,7 @@ app.get('/api/admin/questions/template',requireAuth,async(req,res)=>{
     await wb.xlsx.write(res); res.end()
 })
 
-app.get('/api/admin/results',requireAuth,async(req,res)=>{ const r=await TestResult.find().populate('student_id','full_name direction course email phone').sort({finished_at:-1,started_at:-1}).lean(); res.json({success:true,data:r.map(x=>({id:x._id,score:x.score,total:x.total,started_at:x.started_at,finished_at:x.finished_at,tab_switch_count:x.tab_switch_count,ended_reason:x.ended_reason,client_mode:x.client_mode,full_name:x.student_id?.full_name,direction:x.student_id?.direction,course:x.student_id?.course,email:x.student_id?.email,phone:x.student_id?.phone}))}) })
+app.get('/api/admin/results',requireAuth,async(req,res)=>{ const r=await TestResult.find().populate('student_id','full_name direction course email phone').sort({finished_at:-1,started_at:-1}).lean(); res.json({success:true,data:r.map(x=>({id:x._id,score:x.score,total:x.total,started_at:x.started_at,finished_at:x.finished_at,tab_switch_count:x.tab_switch_count,ended_reason:x.ended_reason,client_mode:x.client_mode,test_lang:x.test_lang,full_name:x.student_id?.full_name,direction:x.student_id?.direction,course:x.student_id?.course,email:x.student_id?.email,phone:x.student_id?.phone}))}) })
 
 app.get('/api/admin/results/excel',requireAuth,async(req,res)=>{
     const rows=await TestResult.find({finished_at:{$ne:null}}).populate('student_id','full_name direction course email phone').sort({score:-1,finished_at:1}).lean()
@@ -473,6 +669,125 @@ app.get('/api/admin/results/excel',requireAuth,async(req,res)=>{
     res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition','attachment; filename="natijalar.xlsx"')
     await wb.xlsx.write(res); res.end()
+})
+
+app.get('/api/verify/:id',async(req,res)=>{
+    const result = await getCertificateRecord(req.params.id)
+    if (!result) return res.status(404).json({success:false,message:'Sertifikat topilmadi'})
+    const student = result.student_id
+    const lang = VALID_LANGS.has(result.test_lang) ? result.test_lang : 'uz'
+    return res.json({
+        success: true,
+        data: {
+            id: result._id,
+            full_name: student.full_name,
+            direction: student.direction,
+            course: student.course,
+            email: student.email,
+            phone: student.phone,
+            finished_at: result.finished_at,
+            lang
+        }
+    })
+})
+
+app.get('/verify/:id',async(req,res)=>{
+    const result = await getCertificateRecord(req.params.id)
+    if (!result) return res.status(404).send('Not found')
+    const student = result.student_id
+    const lang = VALID_LANGS.has(result.test_lang) ? result.test_lang : 'uz'
+    const date = formatDate(result.finished_at || result.started_at)
+    const title = lang === 'ru' ? 'Сертификат подтвержден' : 'Sertifikat tasdiqlandi'
+    const subtitle = lang === 'ru' ? 'Проверка участия в олимпиаде' : 'Olimpiadada qatnashganlik tasdig'i'
+    const labelName = lang === 'ru' ? 'Ф.И.О.' : 'F.I.Sh'
+    const labelDirection = lang === 'ru' ? 'Направление' : "Yo'nalish"
+    const labelCourse = lang === 'ru' ? 'Курс' : 'Kurs'
+    const labelDate = lang === 'ru' ? 'Дата' : 'Sana'
+    const labelId = lang === 'ru' ? 'ID сертификата' : 'Sertifikat ID'
+    const html = `<!doctype html>
+<html lang="${lang}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8fafc; margin: 0; padding: 40px; color: #0f172a; }
+    .card { max-width: 720px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 28px 32px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0; }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    .sub { margin: 0 0 18px; color: #475569; }
+    dl { display: grid; grid-template-columns: 140px 1fr; gap: 10px 16px; margin: 0; }
+    dt { font-weight: 700; color: #334155; }
+    dd { margin: 0; color: #0f172a; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${title}</h1>
+    <p class="sub">${subtitle}</p>
+    <dl>
+      <dt>${labelName}</dt><dd>${escapeHtml(student.full_name || '-')}</dd>
+      <dt>${labelDirection}</dt><dd>${escapeHtml(student.direction || '-')}</dd>
+      <dt>${labelCourse}</dt><dd>${escapeHtml(student.course || '-')}</dd>
+      <dt>${labelDate}</dt><dd>${escapeHtml(date || '-')}</dd>
+      <dt>${labelId}</dt><dd>${escapeHtml(result._id)}</dd>
+    </dl>
+  </div>
+</body>
+</html>`
+    res.setHeader('Content-Type','text/html; charset=utf-8')
+    return res.send(html)
+})
+
+app.get('/api/admin/certificates/:id.png',requireAuth,async(req,res)=>{
+    try {
+        const result = await getCertificateRecord(req.params.id)
+        if (!result) return res.status(404).json({success:false,message:'Sertifikat topilmadi'})
+        const student = result.student_id
+        const lang = VALID_LANGS.has(result.test_lang) ? result.test_lang : 'uz'
+        const variant = parseVariant(req.query.variant)
+        const baseUrl = `${req.protocol}://${req.get('host')}`
+        const verifyUrl = `${baseUrl}/verify/${result._id}`
+        const png = await renderCertificatePng({ student, result, lang, variant, verifyUrl })
+        res.setHeader('Content-Type','image/png')
+        res.setHeader('Content-Disposition',`attachment; filename="sertifikat-${result._id}.png"`)
+        return res.send(png)
+    } catch (err) {
+        console.error(err)
+        return res.status(500).json({success:false,message:'Server xatosi'})
+    }
+})
+
+app.get('/api/admin/certificates/zip',requireAuth,async(req,res)=>{
+    try {
+        const variant = parseVariant(req.query.variant)
+        const rows = await TestResult.find({finished_at:{$ne:null}})
+            .populate('student_id','full_name direction course email phone')
+            .sort({finished_at:-1})
+            .lean()
+        if (!rows.length) return res.status(404).json({success:false,message:'Tugallangan testlar topilmadi'})
+        res.setHeader('Content-Type','application/zip')
+        res.setHeader('Content-Disposition','attachment; filename="sertifikatlar.zip"')
+        const archive = archiver('zip', { zlib: { level: 9 } })
+        archive.on('error', (err) => {
+            console.error(err)
+            if (!res.headersSent) res.status(500).json({success:false,message:'Server xatosi'})
+        })
+        archive.pipe(res)
+        const baseUrl = `${req.protocol}://${req.get('host')}`
+        for (const result of rows) {
+            if (!result.student_id) continue
+            const student = result.student_id
+            const lang = VALID_LANGS.has(result.test_lang) ? result.test_lang : 'uz'
+            const verifyUrl = `${baseUrl}/verify/${result._id}`
+            const png = await renderCertificatePng({ student, result, lang, variant, verifyUrl })
+            const fileName = `${slugify(student.full_name)}-${result._id}.png`
+            archive.append(png, { name: fileName })
+        }
+        await archive.finalize()
+    } catch (err) {
+        console.error(err)
+        if (!res.headersSent) return res.status(500).json({success:false,message:'Server xatosi'})
+    }
 })
 
 async function watchdog() {
