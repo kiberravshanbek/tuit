@@ -698,7 +698,7 @@ app.get('/verify/:id',async(req,res)=>{
     const lang = VALID_LANGS.has(result.test_lang) ? result.test_lang : 'uz'
     const date = formatDate(result.finished_at || result.started_at)
     const title = lang === 'ru' ? 'Сертификат подтвержден' : 'Sertifikat tasdiqlandi'
-    const subtitle = lang === 'ru' ? 'Проверка участия в олимпиаде' : 'Olimpiadada qatnashganlik tasdig'i'
+    const subtitle = lang === 'ru' ? 'Проверка участия в олимпиаде' : 'Olimpiadada qatnashganlik tasdig\'i'
     const labelName = lang === 'ru' ? 'Ф.И.О.' : 'F.I.Sh'
     const labelDirection = lang === 'ru' ? 'Направление' : "Yo'nalish"
     const labelCourse = lang === 'ru' ? 'Курс' : 'Kurs'
