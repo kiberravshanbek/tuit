@@ -55,13 +55,19 @@ const SECURITY_EVENT_TYPES = new Set(['tab_hidden','window_blur','copy_block','c
 const FORCE_FINISH_REASONS = new Set(['kiosk_focus_lost','kiosk_app_closed','kiosk_heartbeat_lost','kiosk_host_force_finish','kiosk_policy'])
 const CERT_WIDTH = 1600, CERT_HEIGHT = 1131
 const CERT_THEMES = [
-    { bg: '#F8FAFC', primary: '#1E3A8A', accent: '#0F172A', highlight: '#E0E7FF' },
-    { bg: '#F0FDF4', primary: '#065F46', accent: '#052E16', highlight: '#DCFCE7' },
-    { bg: '#FFF7ED', primary: '#9A3412', accent: '#7C2D12', highlight: '#FFEDD5' },
+    { bgStart: '#EEF5FF', bgEnd: '#F7FAFF', primary: '#0F3D91', accent: '#0B1F3B', highlight: '#CFE1FF', wave: '#2D7DE0', glow: 'rgba(125, 170, 255, 0.55)', grid: 'rgba(41, 98, 184, 0.22)' },
+    { bgStart: '#ECFEF8', bgEnd: '#F7FFFC', primary: '#0A6A5A', accent: '#073A32', highlight: '#C9F5E6', wave: '#0EA58A', glow: 'rgba(86, 211, 178, 0.55)', grid: 'rgba(8, 120, 96, 0.22)' },
+    { bgStart: '#FFF5EC', bgEnd: '#FFF9F3', primary: '#A14C15', accent: '#57270B', highlight: '#FFE2C8', wave: '#E67D2E', glow: 'rgba(242, 163, 93, 0.52)', grid: 'rgba(186, 96, 34, 0.20)' },
+]
+const CERT_LOGO_PATHS = [
+    path.join(__dirname, 'assets', 'logo', 'tatu-logo.png'),
+    path.join(__dirname, 'assets', 'logo', 'TATU_logo.png'),
+    path.join(__dirname, 'assets', 'logo', 'tatu.png'),
 ]
 const CERT_FONT_DIR = path.join(__dirname, 'assets', 'fonts')
 const CERT_FONTS = { serif: null, serifBold: null, sans: null, sansBold: null }
 const CERT_CANVAS_FONTS = { serif: 'Times New Roman', sans: 'Arial' }
+let certLogoPromise = null
 const tryRegisterFont = (file, family, weight='normal') => {
     const fontPath = path.join(CERT_FONT_DIR, file)
     if (!fs.existsSync(fontPath)) return
@@ -97,6 +103,27 @@ const loadCertFonts = () => {
     CERT_CANVAS_FONTS.serif = pick('Noto Serif', 'Times New Roman')
 }
 loadCertFonts()
+
+async function getCertificateLogo() {
+    if (!certLogoPromise) {
+        certLogoPromise = (async () => {
+            for (const logoPath of CERT_LOGO_PATHS) {
+                if (!fs.existsSync(logoPath)) continue
+                try {
+                    return await loadImage(logoPath)
+                } catch {
+                    // try next file
+                }
+            }
+            return null
+        })()
+    }
+    try {
+        return await certLogoPromise
+    } catch {
+        return null
+    }
+}
 
 if (IS_PROD) {
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASS) throw new Error('ADMIN_USER va ADMIN_PASS majburiy.')
@@ -219,33 +246,135 @@ function drawParagraph(ctx, text, x, y, maxWidth, lineHeight, align='center', fo
     return y + lines.length * lineHeight
 }
 
-function drawCertificateBackground(ctx, theme, variant) {
-    ctx.fillStyle = theme.bg
-    ctx.fillRect(0, 0, CERT_WIDTH, CERT_HEIGHT)
+function roundedRectPath(ctx, x, y, w, h, r = 14) {
+    const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2))
+    ctx.beginPath()
+    ctx.moveTo(x + radius, y)
+    ctx.lineTo(x + w - radius, y)
+    ctx.quadraticCurveTo(x + w, y, x + w, y + radius)
+    ctx.lineTo(x + w, y + h - radius)
+    ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h)
+    ctx.lineTo(x + radius, y + h)
+    ctx.quadraticCurveTo(x, y + h, x, y + h - radius)
+    ctx.lineTo(x, y + radius)
+    ctx.quadraticCurveTo(x, y, x + radius, y)
+    ctx.closePath()
+}
+
+function drawWirelessIcon(ctx, x, y, size, color, alpha = 0.2) {
+    const radii = [size * 0.22, size * 0.35, size * 0.48]
     ctx.save()
-    ctx.globalAlpha = 0.12
-    ctx.fillStyle = theme.highlight
-    if (variant === 1) {
-        ctx.fillRect(0, 0, CERT_WIDTH, 160)
-        ctx.fillRect(0, CERT_HEIGHT - 120, CERT_WIDTH, 120)
-    } else if (variant === 2) {
-        ctx.fillRect(0, 0, 180, CERT_HEIGHT)
-        ctx.fillRect(CERT_WIDTH - 120, 0, 120, CERT_HEIGHT)
-    } else {
+    ctx.globalAlpha = alpha
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
+    ctx.lineCap = 'round'
+    radii.forEach((r, idx) => {
+        ctx.lineWidth = Math.max(1.2, 3.4 - idx * 0.8)
         ctx.beginPath()
-        ctx.moveTo(0, 0)
-        ctx.lineTo(CERT_WIDTH, 0)
-        ctx.lineTo(CERT_WIDTH, 220)
-        ctx.closePath()
-        ctx.fill()
+        ctx.arc(x, y, r, Math.PI * 1.12, Math.PI * 1.88)
+        ctx.stroke()
+    })
+    ctx.beginPath()
+    ctx.arc(x, y + size * 0.26, Math.max(3, size * 0.033), 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+}
+
+function drawCertificateBackground(ctx, theme, variant) {
+    const bgStart = theme.bgStart || '#F8FAFC'
+    const bgEnd = theme.bgEnd || '#FFFFFF'
+    const wave = theme.wave || theme.primary || '#1E3A8A'
+    const highlight = theme.highlight || '#E2E8F0'
+    const grid = theme.grid || 'rgba(30, 58, 138, 0.14)'
+    const glow = theme.glow || 'rgba(59, 130, 246, 0.45)'
+
+    const bg = ctx.createLinearGradient(0, 0, CERT_WIDTH, CERT_HEIGHT)
+    bg.addColorStop(0, bgStart)
+    bg.addColorStop(1, bgEnd)
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, CERT_WIDTH, CERT_HEIGHT)
+
+    const glow1 = ctx.createRadialGradient(CERT_WIDTH * 0.17, CERT_HEIGHT * 0.17, 10, CERT_WIDTH * 0.17, CERT_HEIGHT * 0.17, 430)
+    glow1.addColorStop(0, glow)
+    glow1.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = glow1
+    ctx.fillRect(0, 0, CERT_WIDTH, CERT_HEIGHT)
+
+    const glow2 = ctx.createRadialGradient(CERT_WIDTH * 0.86, CERT_HEIGHT * 0.77, 10, CERT_WIDTH * 0.86, CERT_HEIGHT * 0.77, 380)
+    glow2.addColorStop(0, glow)
+    glow2.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = glow2
+    ctx.fillRect(0, 0, CERT_WIDTH, CERT_HEIGHT)
+
+    ctx.save()
+    ctx.globalAlpha = 0.24
+    ctx.fillStyle = highlight
+    ctx.fillRect(0, 0, CERT_WIDTH, 150)
+    ctx.fillRect(0, CERT_HEIGHT - 132, CERT_WIDTH, 132)
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalAlpha = 0.9
+    ctx.strokeStyle = grid
+    ctx.lineWidth = 1.2
+    for (let i = -6; i < 28; i++) {
+        const x = i * 95
         ctx.beginPath()
-        ctx.moveTo(0, CERT_HEIGHT)
-        ctx.lineTo(0, CERT_HEIGHT - 220)
-        ctx.lineTo(CERT_WIDTH, CERT_HEIGHT)
-        ctx.closePath()
-        ctx.fill()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x + 250, CERT_HEIGHT)
+        ctx.stroke()
     }
     ctx.restore()
+
+    ctx.save()
+    ctx.globalAlpha = 0.22
+    ctx.strokeStyle = wave
+    ctx.lineWidth = 2.2
+    for (let i = 0; i < 5; i++) {
+        const y = 185 + i * 165 + (variant - 1) * 12
+        ctx.beginPath()
+        ctx.moveTo(-120, y)
+        ctx.bezierCurveTo(CERT_WIDTH * 0.2, y - 40, CERT_WIDTH * 0.78, y + 34, CERT_WIDTH + 120, y - 8)
+        ctx.stroke()
+    }
+    ctx.restore()
+
+    const nodes = [
+        [200, 220], [360, 280], [560, 240], [760, 300], [980, 270], [1210, 330], [1400, 290],
+        [270, 780], [460, 730], [690, 790], [910, 735], [1110, 800], [1320, 760]
+    ]
+    ctx.save()
+    ctx.globalAlpha = 0.32
+    ctx.strokeStyle = wave
+    ctx.fillStyle = wave
+    ctx.lineWidth = 1.4
+    for (let i = 1; i < nodes.length; i++) {
+        const prev = nodes[i - 1]
+        const cur = nodes[i]
+        ctx.beginPath()
+        ctx.moveTo(prev[0], prev[1])
+        ctx.lineTo(cur[0], cur[1])
+        ctx.stroke()
+    }
+    nodes.forEach(([nx, ny]) => {
+        ctx.beginPath()
+        ctx.arc(nx, ny, 4.2, 0, Math.PI * 2)
+        ctx.fill()
+    })
+    ctx.restore()
+
+    drawWirelessIcon(ctx, 210, 190, 140, wave, 0.24)
+    drawWirelessIcon(ctx, CERT_WIDTH - 240, 205, 110, wave, 0.16)
+    drawWirelessIcon(ctx, CERT_WIDTH - 230, CERT_HEIGHT - 210, 145, wave, 0.22)
+
+    ctx.save()
+    ctx.globalAlpha = 0.11
+    ctx.fillStyle = wave
+    ctx.font = `bold 150px "${CERT_CANVAS_FONTS.sans}"`
+    ctx.textAlign = 'left'
+    ctx.fillText('5G', CERT_WIDTH - 425, 258)
+    ctx.restore()
+
     ctx.strokeStyle = theme.primary
     ctx.lineWidth = 6
     ctx.strokeRect(40, 40, CERT_WIDTH - 80, CERT_HEIGHT - 80)
@@ -255,41 +384,51 @@ function drawCertificateBackground(ctx, theme, variant) {
 }
 
 function getCertCopy(lang, student, result) {
-    const name = nt(student.full_name, 120) || (lang === 'ru' ? 'Участник' : 'Ishtirokchi')
+    const name = nt(student.full_name, 120) || (lang === 'ru' ? 'Uchastnik' : 'Ishtirokchi')
     const direction = nt(student.direction, 120)
     const course = nt(student.course, 40)
     const date = formatDate(result.finished_at || result.started_at)
+
     if (lang === 'ru') {
         return {
             name,
-            title: 'СЕРТИФИКАТ',
-            subtitle: 'Участник олимпиады',
-            body: [
-                'Настоящий сертификат выдан за участие в олимпиаде',
-                'по дисциплине «Беспроводные сети», проведенной на кафедре',
-                '«Мобильные технологии связи» факультета радио и мобильной связи',
-                'Ташкентского университета информационных технологий',
-                'имени Мухаммада аль-Хоразмий.'
+            title: 'SERTIFIKAT',
+            subtitle: 'Uchastnik olimpiady po besprovodnym setyam',
+            universityLines: [
+                'Tashkentskiy universitet informatsionnyh tehnologiy',
+                'imeni Muhammada al-Horazmiy'
             ],
-            fieldLine: `Направление: ${direction || '-'}   Курс: ${course || '-'}   Дата: ${date || '-'}`,
-            footerLabel: 'Заведующий кафедрой «Мобильные технологии связи»',
-            footerName: 'Хайруллаев Алишер Файзулла угли',
-            qrLabel: 'Проверка по QR'
+            facultyLine: 'Fakultet radio i mobilnoy svyazi',
+            awardLabel: 'NAGRAZhDAETSYA',
+            body: [
+                'za aktivnoe uchastie v olimpiade',
+                'po distsipline "Besprovodnye seti".'
+            ],
+            subjectLine: 'Predmet: Besprovodnye seti',
+            fieldLine: `Napravlenie: ${direction || '-'}   Kurs: ${course || '-'}   Data: ${date || '-'}`,
+            footerLabel: 'Zaveduyushchiy kafedroy',
+            footerName: 'Xayrullayev Alisher Fayzulla o`gli',
+            qrLabel: 'Proverka po QR'
         }
     }
+
     return {
         name,
         title: 'SERTIFIKAT',
-        subtitle: 'Olimpiada ishtirokchisi',
-        body: [
-            'Ushbu sertifikat Muhammad al-Xorazmiy nomidagi',
-            'Toshkent Axborot Texnologiyalari Universiteti',
-            'Radio va mobil aloqa fakulteti Mobil aloqa texnologiyalari',
-            'kafedrasida o\'tkazilgan "Simsiz tarmoqlar" fanidan',
-            'olimpiadada qatnashganligi uchun berildi.'
+        subtitle: 'Simsiz aloqa va tarmoqlar olimpiadasi',
+        universityLines: [
+            'Muhammad al-Xorazmiy nomidagi',
+            'Toshkent Axborot Texnologiyalari Universiteti'
         ],
+        facultyLine: 'Radio va mobil aloqa fakulteti | Mobil aloqa texnologiyalari kafedrasi',
+        awardLabel: 'TAQDIRLANADI',
+        body: [
+            '"Simsiz tarmoqlar" fanidan olimpiadada',
+            'faol ishtirok etganligi uchun ushbu sertifikat bilan taqdirlanadi.'
+        ],
+        subjectLine: 'Fan: Simsiz tarmoqlar',
         fieldLine: `Yo'nalish: ${direction || '-'}   Kurs: ${course || '-'}   Sana: ${date || '-'}`,
-        footerLabel: 'Mobil aloqa texnologiyalari kafedra mudiri',
+        footerLabel: 'Mobil aloqa texnologiyalari kafedrasi mudiri',
         footerName: "Xayrullayev Alisher Fayzulla o'g'li",
         qrLabel: 'QR orqali tekshirish'
     }
@@ -302,70 +441,138 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     drawCertificateBackground(ctx, theme, variant)
 
     const copy = getCertCopy(lang, student, result)
+    const logoImage = await getCertificateLogo()
     const centerX = CERT_WIDTH / 2
+    const maxWidth = CERT_WIDTH - 210
+    const topShift = logoImage ? 62 : 0
 
-    ctx.font = `bold 72px "${CERT_CANVAS_FONTS.serif}"`
+    if (logoImage) {
+        const plateCenterY = 118
+        const plateRadius = 78
+        ctx.save()
+        ctx.shadowColor = 'rgba(9, 30, 66, 0.24)'
+        ctx.shadowBlur = 24
+        ctx.shadowOffsetY = 5
+        ctx.fillStyle = 'rgba(255,255,255,0.95)'
+        ctx.beginPath()
+        ctx.arc(centerX, plateCenterY, plateRadius, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+
+        ctx.save()
+        ctx.strokeStyle = theme.primary
+        ctx.lineWidth = 2.4
+        ctx.beginPath()
+        ctx.arc(centerX, plateCenterY, plateRadius, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+
+        const maxLogoW = 122
+        const maxLogoH = 122
+        const logoScale = Math.min(maxLogoW / logoImage.width, maxLogoH / logoImage.height)
+        const drawW = Math.max(1, Math.round(logoImage.width * logoScale))
+        const drawH = Math.max(1, Math.round(logoImage.height * logoScale))
+        const drawX = Math.round(centerX - drawW / 2)
+        const drawY = Math.round(plateCenterY - drawH / 2)
+        ctx.drawImage(logoImage, drawX, drawY, drawW, drawH)
+    }
+
+    ctx.font = `bold 78px "${CERT_CANVAS_FONTS.serif}"`
     ctx.fillStyle = theme.primary
-    drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.title, centerX, 150, 'center', 72)
-    ctx.font = `26px "${CERT_CANVAS_FONTS.sans}"`
-    ctx.fillStyle = theme.accent
-    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.subtitle, centerX, 190, 'center', 26)
-
-    ctx.font = `bold 54px "${CERT_CANVAS_FONTS.serif}"`
-    ctx.fillStyle = theme.accent
-    drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.name, centerX, 300, 'center', 54)
-
-    ctx.strokeStyle = theme.primary
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(260, 320)
-    ctx.lineTo(CERT_WIDTH - 260, 320)
-    ctx.stroke()
+    drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.title, centerX, 146 + topShift, 'center', 78)
 
     ctx.font = `28px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
-    let y = 380
-    const maxWidth = CERT_WIDTH - 240
-    for (const paragraph of copy.body) {
-        y = drawParagraph(ctx, paragraph, centerX, y, maxWidth, 36, 'center', CERT_FONTS.sans || CERT_FONTS.serif, 28)
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.subtitle, centerX, 196 + topShift, 'center', 28)
+
+    ctx.font = `bold 34px "${CERT_CANVAS_FONTS.serif}"`
+    let y = 246 + topShift
+    y = drawParagraph(ctx, copy.universityLines || [], centerX, y, maxWidth, 44, 'center', CERT_FONTS.serifBold || CERT_FONTS.serif, 34)
+
+    y += 14
+    ctx.font = `23px "${CERT_CANVAS_FONTS.sans}"`
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.facultyLine || '', centerX, y, 'center', 23)
+
+    y += 56
+    ctx.font = `bold 22px "${CERT_CANVAS_FONTS.sans}"`
+    ctx.fillStyle = theme.primary
+    drawTextLine(ctx, CERT_FONTS.sansBold || CERT_FONTS.sans || CERT_FONTS.serif, copy.awardLabel || '', centerX, y, 'center', 22)
+
+    y += 58
+    ctx.font = `bold 62px "${CERT_CANVAS_FONTS.serif}"`
+    ctx.fillStyle = theme.accent
+    drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.name, centerX, y, 'center', 62)
+
+    y += 14
+    ctx.strokeStyle = theme.primary
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(270, y)
+    ctx.lineTo(CERT_WIDTH - 270, y)
+    ctx.stroke()
+
+    y += 56
+    ctx.font = `28px "${CERT_CANVAS_FONTS.sans}"`
+    ctx.fillStyle = theme.accent
+    for (const paragraph of copy.body || []) {
+        y = drawParagraph(ctx, paragraph, centerX, y, maxWidth, 38, 'center', CERT_FONTS.sans || CERT_FONTS.serif, 28)
         y += 8
     }
 
-    ctx.font = `24px "${CERT_CANVAS_FONTS.sans}"`
-    y += 12
-    y = drawParagraph(ctx, copy.fieldLine, centerX, y, maxWidth, 32, 'center', CERT_FONTS.sans || CERT_FONTS.serif, 24)
+    const subjectBoxW = 760
+    const subjectBoxH = 58
+    const subjectBoxX = Math.round((CERT_WIDTH - subjectBoxW) / 2)
+    const subjectBoxY = y + 14
 
-    const footerY = CERT_HEIGHT - 170
-    ctx.textAlign = 'left'
-    ctx.font = `20px "${CERT_CANVAS_FONTS.sans}"`
+    ctx.save()
+    ctx.globalAlpha = 0.92
+    ctx.fillStyle = theme.highlight
+    roundedRectPath(ctx, subjectBoxX, subjectBoxY, subjectBoxW, subjectBoxH, 14)
+    ctx.fill()
+    ctx.strokeStyle = theme.primary
+    ctx.lineWidth = 1.8
+    roundedRectPath(ctx, subjectBoxX, subjectBoxY, subjectBoxW, subjectBoxH, 14)
+    ctx.stroke()
+    ctx.restore()
+
+    ctx.font = `bold 30px "${CERT_CANVAS_FONTS.sans}"`
+    ctx.fillStyle = theme.primary
+    drawTextLine(ctx, CERT_FONTS.sansBold || CERT_FONTS.sans || CERT_FONTS.serif, copy.subjectLine || '', centerX, subjectBoxY + 39, 'center', 30)
+
+    y = subjectBoxY + subjectBoxH + 42
+    ctx.font = `23px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
-    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.footerLabel, 120, footerY, 'left', 20)
-    ctx.font = `bold 22px "${CERT_CANVAS_FONTS.sans}"`
-    drawTextLine(ctx, CERT_FONTS.sansBold || CERT_FONTS.sans || CERT_FONTS.serif, copy.footerName, 120, footerY + 28, 'left', 22)
+    y = drawParagraph(ctx, copy.fieldLine, centerX, y, maxWidth, 32, 'center', CERT_FONTS.sans || CERT_FONTS.serif, 23)
+
+    const footerY = CERT_HEIGHT - 195
+    ctx.textAlign = 'left'
+    ctx.font = `21px "${CERT_CANVAS_FONTS.sans}"`
+    ctx.fillStyle = theme.accent
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.footerLabel, 120, footerY, 'left', 21)
+    ctx.font = `bold 24px "${CERT_CANVAS_FONTS.sans}"`
+    drawTextLine(ctx, CERT_FONTS.sansBold || CERT_FONTS.sans || CERT_FONTS.serif, copy.footerName, 120, footerY + 31, 'left', 24)
     ctx.strokeStyle = theme.primary
     ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.moveTo(120, footerY + 42)
-    ctx.lineTo(520, footerY + 42)
+    ctx.moveTo(120, footerY + 47)
+    ctx.lineTo(620, footerY + 47)
     ctx.stroke()
 
     ctx.font = `16px "${CERT_CANVAS_FONTS.sans}"`
-    ctx.fillStyle = theme.accent
-    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, `ID: ${result._id}`, 120, CERT_HEIGHT - 70, 'left', 16)
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, `ID: ${result._id}`, 120, CERT_HEIGHT - 72, 'left', 16)
 
     const qrData = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 240 })
     const qrImg = await loadImage(qrData)
-    const qrX = CERT_WIDTH - 340
-    const qrY = CERT_HEIGHT - 330
-    ctx.drawImage(qrImg, qrX, qrY, 220, 220)
+    const qrX = CERT_WIDTH - 338
+    const qrY = CERT_HEIGHT - 338
+    ctx.drawImage(qrImg, qrX, qrY, 216, 216)
     ctx.textAlign = 'center'
     ctx.font = `18px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
-    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.qrLabel, qrX + 110, qrY + 245, 'center', 18)
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.qrLabel, qrX + 108, qrY + 238, 'center', 18)
 
     return canvas.toBuffer('image/png')
 }
-
 async function getCertificateRecord(id) {
     let result
     try {
