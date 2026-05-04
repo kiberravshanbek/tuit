@@ -95,6 +95,12 @@
                             <p class="muted">Testni topshirgan talabalar va ularning ballari</p>
                         </div>
                         <div class="header-actions">
+                            <select id="certVariant" title="Sertifikat varianti" style="padding:8px 10px;border-radius:10px;border:1.5px solid #cbd5e1">
+                                <option value="1">Sertifikat 1</option>
+                                <option value="2">Sertifikat 2</option>
+                                <option value="3">Sertifikat 3</option>
+                            </select>
+                            <button id="downloadCertZip" class="btn btn-primary">🧾 Sertifikatlar ZIP</button>
                             <button id="exportResults" class="btn btn-success">📊 Excel eksport</button>
                         </div>
                     </header>
@@ -108,9 +114,9 @@
                     <div class="table-wrapper">
                         <table class="data-table">
                             <thead>
-                                <tr><th>#</th><th>F.I.Sh</th><th>Yo'nalish</th><th>Kurs</th><th>Email</th><th>Ball</th><th>%</th><th>Rejim</th><th>Tab</th><th>Sabab</th><th>Tugatgan</th></tr>
+                                <tr><th>#</th><th>F.I.Sh</th><th>Yo'nalish</th><th>Kurs</th><th>Email</th><th>Ball</th><th>%</th><th>Rejim</th><th>Tab</th><th>Sabab</th><th>Tugatgan</th><th>Sertifikat</th></tr>
                             </thead>
-                            <tbody id="resultsTable"><tr><td colspan="11" class="loading">Yuklanmoqda...</td></tr></tbody>
+                            <tbody id="resultsTable"><tr><td colspan="12" class="loading">Yuklanmoqda...</td></tr></tbody>
                         </table>
                     </div>
                 </section>
@@ -491,6 +497,12 @@
                 if (data.success) loadQuestions()
             })
             // ===== RESULTS =====
+            function getCertVariant() {
+                const el = document.getElementById('certVariant')
+                const v = Number.parseInt(el ? el.value : '1', 10)
+                return Number.isInteger(v) && v >= 1 && v <= 3 ? v : 1
+            }
+
             async function loadResults() {
                 const res = await fetch('/api/admin/results')
                 if (res.status === 401) return (window.location.href = '/login.html')
@@ -506,7 +518,7 @@
                 const sorted = completed.slice().sort((a, b) => (b.score / b.total) - (a.score / a.total))
 
                 const tbody = document.getElementById('resultsTable')
-                if (sorted.length === 0) return (tbody.innerHTML = '<tr><td colspan="11" class="loading">Hali natijalar yo\'q</td></tr>')
+                if (sorted.length === 0) return (tbody.innerHTML = '<tr><td colspan="12" class="loading">Hali natijalar yo\'q</td></tr>')
                 tbody.innerHTML = sorted
                     .map((r, i) => {
                         const pct = r.total ? Math.round((r.score / r.total) * 100) : 0
@@ -528,12 +540,26 @@
                                 <td>${tabSwitch}</td>
                                 <td class="muted">${escapeHtml(endedReason)}</td>
                                 <td class="muted">${escapeHtml(r.finished_at || '-')}</td>
+                                <td><button class="btn-icon" data-action="cert-png" data-id="${escapeHtml(r.id)}">PNG</button></td>
                             </tr>`
                     })
                     .join('')
             }
 
             document.getElementById('exportResults').addEventListener('click', () => (window.location.href = '/api/admin/results/excel'))
+            document.getElementById('downloadCertZip').addEventListener('click', () => {
+                const v = getCertVariant()
+                window.location.href = `/api/admin/certificates/zip?variant=${v}`
+            })
+
+            document.getElementById('resultsTable').addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-action="cert-png"]')
+                if (!btn) return
+                const id = String(btn.dataset.id || '').trim()
+                if (!id) return
+                const v = getCertVariant()
+                window.open(`/api/admin/certificates/${encodeURIComponent(id)}.png?variant=${v}`, '_blank')
+            })
 
             // ===== LOGOUT =====
             document.getElementById('logoutBtn').addEventListener('click', async () => {
