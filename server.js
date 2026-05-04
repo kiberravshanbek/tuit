@@ -389,7 +389,7 @@ function getCertCopy(lang, student, result) {
     return {
         name,
         title: 'SERTIFIKAT',
-        subtitle: 'Simsiz aloqa va tarmoqlar olimpiadasi',
+        subtitle: 'Simsiz Tarmoqlar',
         universityLines: [
             'Muhammad al-Xorazmiy nomidagi',
             'Toshkent Axborot Texnologiyalari Universiteti'
