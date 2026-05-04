@@ -152,13 +152,52 @@ const formatDate = (v) => { if (!v) return ''; const d = new Date(v); if (Number
 const slugify = (v) => { const s = nt(String(v||''),80).toLowerCase(); const out = s.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); return out || 'sertifikat' }
 const escapeHtml = (v) => String(v||'').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 
-function wrapText(ctx, text, maxWidth) {
+function measureTextWidth(ctx, font, text, size) {
+    try {
+        if (font && typeof font.getAdvanceWidth === 'function') {
+            return font.getAdvanceWidth(text, size)
+        }
+    } catch {
+        // fall back to canvas measurement
+    }
+    try {
+        return ctx.measureText(text).width
+    } catch {
+        return 0
+    }
+}
+
+function drawTextLine(ctx, font, text, x, y, align, size) {
+    const raw = String(text || '')
+    const width = measureTextWidth(ctx, font, raw, size)
+    let startX = x
+    if (align === 'center') startX = x - width / 2
+    if (align === 'right') startX = x - width
+
+    if (font && typeof font.getPath === 'function') {
+        try {
+            const path = font.getPath(raw, startX, y, size)
+            path.draw(ctx)
+            return
+        } catch {
+            // fall back to fillText
+        }
+    }
+    try {
+        ctx.textAlign = align
+        ctx.fillText(raw, x, y)
+    } catch {
+        // ignore rendering errors
+    }
+}
+
+function wrapText(ctx, text, maxWidth, font, size) {
     const words = String(text||'').split(/\s+/).filter(Boolean)
     const lines = []
     let line = ''
     for (const word of words) {
         const test = line ? `${line} ${word}` : word
-        if (ctx.measureText(test).width <= maxWidth) { line = test; continue }
+        if (measureTextWidth(ctx, font, test, size) <= maxWidth) { line = test; continue }
         if (line) lines.push(line)
         line = word
     }
@@ -166,10 +205,9 @@ function wrapText(ctx, text, maxWidth) {
     return lines
 }
 
-function drawParagraph(ctx, text, x, y, maxWidth, lineHeight, align='center') {
-    const lines = Array.isArray(text) ? text : wrapText(ctx, text, maxWidth)
-    ctx.textAlign = align
-    lines.forEach((line, idx) => ctx.fillText(line, x, y + idx * lineHeight))
+function drawParagraph(ctx, text, x, y, maxWidth, lineHeight, align='center', font=null, size=16) {
+    const lines = Array.isArray(text) ? text : wrapText(ctx, text, maxWidth, font, size)
+    lines.forEach((line, idx) => drawTextLine(ctx, font, line, x, y + idx * lineHeight, align, size))
     return y + lines.length * lineHeight
 }
 
@@ -786,7 +824,8 @@ app.get('/api/admin/certificates/:id.png',requireAuth,async(req,res)=>{
         return res.send(png)
     } catch (err) {
         console.error(err)
-        return res.status(500).json({success:false,message:'Server xatosi'})
+        const debug = String(req.query.debug || '') === '1'
+        return res.status(500).json({success:false,message:'Server xatosi',detail:debug?String(err&&err.message?err.message:err):undefined})
     }
 })
 
