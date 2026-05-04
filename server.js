@@ -11,6 +11,7 @@ const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas')
 const { registerFont } = require('@napi-rs/canvas/node-canvas')
 const QRCode = require('qrcode')
 const archiver = require('archiver')
+const opentype = require('opentype.js')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -59,17 +60,33 @@ const CERT_THEMES = [
     { bg: '#FFF7ED', primary: '#9A3412', accent: '#7C2D12', highlight: '#FFEDD5' },
 ]
 const CERT_FONT_DIR = path.join(__dirname, 'assets', 'fonts')
+const CERT_FONTS = { serif: null, serifBold: null, sans: null, sansBold: null }
 const tryRegisterFont = (file, family, weight='normal') => {
     const fontPath = path.join(CERT_FONT_DIR, file)
     if (!fs.existsSync(fontPath)) return
     try { registerFont(fontPath, { family, weight }) } catch { /* ignore */ }
     try { if (GlobalFonts && GlobalFonts.registerFromPath) GlobalFonts.registerFromPath(fontPath, family) } catch { /* ignore */ }
 }
+const loadOpentypeFont = (file) => {
+    const fontPath = path.join(CERT_FONT_DIR, file)
+    if (!fs.existsSync(fontPath)) return null
+    try {
+        const buf = fs.readFileSync(fontPath)
+        const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+        return opentype.parse(ab)
+    } catch {
+        return null
+    }
+}
 const loadCertFonts = () => {
     tryRegisterFont('NotoSans-Regular.ttf', 'Noto Sans', 'normal')
     tryRegisterFont('NotoSans-Bold.ttf', 'Noto Sans', 'bold')
     tryRegisterFont('NotoSerif-Regular.ttf', 'Noto Serif', 'normal')
     tryRegisterFont('NotoSerif-Bold.ttf', 'Noto Serif', 'bold')
+    CERT_FONTS.sans = loadOpentypeFont('NotoSans-Regular.ttf')
+    CERT_FONTS.sansBold = loadOpentypeFont('NotoSans-Bold.ttf')
+    CERT_FONTS.serif = loadOpentypeFont('NotoSerif-Regular.ttf')
+    CERT_FONTS.serifBold = loadOpentypeFont('NotoSerif-Bold.ttf')
     try { if (GlobalFonts && GlobalFonts.loadFontsFromDir) GlobalFonts.loadFontsFromDir(CERT_FONT_DIR) } catch { /* ignore */ }
     try { if (GlobalFonts && GlobalFonts.loadSystemFonts) GlobalFonts.loadSystemFonts() } catch { /* ignore */ }
 }
@@ -242,16 +259,14 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     const centerX = CERT_WIDTH / 2
 
     ctx.fillStyle = theme.primary
-    ctx.textAlign = 'center'
-    ctx.font = 'bold 72px "Noto Serif", serif'
-    ctx.fillText(copy.title, centerX, 150)
+    drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.title, centerX, 150, 'center', 72)
     ctx.font = '26px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
-    ctx.fillText(copy.subtitle, centerX, 190)
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.subtitle, centerX, 190, 'center', 26)
 
     ctx.font = 'bold 54px "Noto Serif", serif'
     ctx.fillStyle = theme.accent
-    ctx.fillText(copy.name, centerX, 300)
+    drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.name, centerX, 300, 'center', 54)
 
     ctx.strokeStyle = theme.primary
     ctx.lineWidth = 2
@@ -265,21 +280,21 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     let y = 380
     const maxWidth = CERT_WIDTH - 240
     for (const paragraph of copy.body) {
-        y = drawParagraph(ctx, paragraph, centerX, y, maxWidth, 36)
+        y = drawParagraph(ctx, paragraph, centerX, y, maxWidth, 36, 'center', CERT_FONTS.sans || CERT_FONTS.serif, 28)
         y += 8
     }
 
     ctx.font = '24px "Noto Sans", sans-serif'
     y += 12
-    y = drawParagraph(ctx, copy.fieldLine, centerX, y, maxWidth, 32)
+    y = drawParagraph(ctx, copy.fieldLine, centerX, y, maxWidth, 32, 'center', CERT_FONTS.sans || CERT_FONTS.serif, 24)
 
     const footerY = CERT_HEIGHT - 170
     ctx.textAlign = 'left'
     ctx.font = '20px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
-    ctx.fillText(copy.footerLabel, 120, footerY)
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.footerLabel, 120, footerY, 'left', 20)
     ctx.font = 'bold 22px "Noto Sans", sans-serif'
-    ctx.fillText(copy.footerName, 120, footerY + 28)
+    drawTextLine(ctx, CERT_FONTS.sansBold || CERT_FONTS.sans || CERT_FONTS.serif, copy.footerName, 120, footerY + 28, 'left', 22)
     ctx.strokeStyle = theme.primary
     ctx.lineWidth = 1
     ctx.beginPath()
@@ -289,7 +304,7 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
 
     ctx.font = '16px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
-    ctx.fillText(`ID: ${result._id}`, 120, CERT_HEIGHT - 70)
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, `ID: ${result._id}`, 120, CERT_HEIGHT - 70, 'left', 16)
 
     const qrData = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 240 })
     const qrImg = await loadImage(qrData)
@@ -299,7 +314,7 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     ctx.textAlign = 'center'
     ctx.font = '18px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
-    ctx.fillText(copy.qrLabel, qrX + 110, qrY + 245)
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.qrLabel, qrX + 110, qrY + 245, 'center', 18)
 
     return canvas.toBuffer('image/png')
 }
