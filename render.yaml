@@ -8,8 +8,18 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: SQLITE_DB_PATH
-        value: /data/olimpiada.db
+      - key: MONGODB_URI
+        sync: false  # IMPORTANT: Set this in Render dashboard
+      - key: ADMIN_USER
+        sync: false  # Set admin username in Render dashboard
+      - key: ADMIN_PASS
+        sync: false  # Set strong admin password in Render dashboard (min 12 chars)
+      - key: SESSION_SECRET
+        sync: false  # Set long random secret in Render dashboard (min 32 chars)
+    disk:
+      name: olimpiada-data
+      mountPath: /data
+      sizeGB: 1
     disk:
       name: olimpiada-data
       mountPath: /data
