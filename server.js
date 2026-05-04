@@ -379,8 +379,9 @@ function getCertCopy(lang, student, result) {
             ],
             subjectLine: 'Predmet: Besprovodnye seti',
             fieldLine: `Napravlenie: ${direction || '-'}   Kurs: ${course || '-'}   Data: ${date || '-'}`,
-            footerLabel: 'Zaveduyushchiy kafedroy',
-            footerName: 'Xayrullayev Alisher Fayzulla o`gli',
+            footerLabel: 'Prorektor po uchebnoy rabote Tashkentskogo universiteta informatsionnyh tehnologiy imeni Muhammada al-Horazmiy',
+            footerName: 'Tashev Komil Axmatovich',
+            footerNote: 'podtverzhdaet',
             qrLabel: 'Proverka po QR'
         }
     }
@@ -401,8 +402,9 @@ function getCertCopy(lang, student, result) {
         ],
         subjectLine: 'Fan: Simsiz tarmoqlar',
         fieldLine: `Yo'nalish: ${direction || '-'}   Kurs: ${course || '-'}   Sana: ${date || '-'}`,
-        footerLabel: 'Mobil aloqa texnologiyalari kafedrasi mudiri',
-        footerName: "Xayrullayev Alisher Fayzulla o'g'li",
+        footerLabel: "Muhammad al-Xorazmiy nomidagi Toshkent axborot texnologiyalari universiteti o'quv ishlari bo'yicha prorektori",
+        footerName: 'Tashev Komil Axmatovich',
+        footerNote: 'shuni tasdiqlaydi',
         qrLabel: 'QR orqali tekshirish'
     }
 }
@@ -486,16 +488,32 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
 
     const footerY = CERT_HEIGHT - 195
     ctx.textAlign = 'left'
-    ctx.font = `21px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
-    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.footerLabel, 120, footerY, 'left', 21)
+    const footerX = 120
+    const footerMaxWidth = 760
+    ctx.font = `20px "${CERT_CANVAS_FONTS.sans}"`
+    const footerLabel = String(copy.footerLabel || '')
+    const footerLabelLines = footerLabel ? wrapText(ctx, footerLabel, footerMaxWidth, CERT_FONTS.sans || CERT_FONTS.serif, 20) : []
+    let footerCursorY = footerY
+    for (const line of footerLabelLines) {
+        drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, line, footerX, footerCursorY, 'left', 20)
+        footerCursorY += 26
+    }
+
     ctx.font = `bold 24px "${CERT_CANVAS_FONTS.sans}"`
-    drawTextLine(ctx, CERT_FONTS.sansBold || CERT_FONTS.sans || CERT_FONTS.serif, copy.footerName, 120, footerY + 31, 'left', 24)
+    drawTextLine(ctx, CERT_FONTS.sansBold || CERT_FONTS.sans || CERT_FONTS.serif, copy.footerName, footerX, footerCursorY + 4, 'left', 24)
+
+    if (copy.footerNote) {
+        ctx.font = `19px "${CERT_CANVAS_FONTS.sans}"`
+        drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.footerNote, footerX, footerCursorY + 31, 'left', 19)
+    }
+
     ctx.strokeStyle = theme.primary
     ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.moveTo(120, footerY + 47)
-    ctx.lineTo(620, footerY + 47)
+    const signatureY = footerCursorY + 48
+    ctx.moveTo(footerX, signatureY)
+    ctx.lineTo(690, signatureY)
     ctx.stroke()
 
     ctx.font = `16px "${CERT_CANVAS_FONTS.sans}"`
