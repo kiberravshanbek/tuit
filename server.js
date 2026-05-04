@@ -7,7 +7,7 @@ const path = require('path')
 const fs = require('fs')
 const multer = require('multer')
 const crypto = require('crypto')
-const { createCanvas, loadImage } = require('@napi-rs/canvas')
+const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas')
 const { registerFont } = require('@napi-rs/canvas/node-canvas')
 const QRCode = require('qrcode')
 const archiver = require('archiver')
@@ -63,11 +63,17 @@ const tryRegisterFont = (file, family, weight='normal') => {
     const fontPath = path.join(CERT_FONT_DIR, file)
     if (!fs.existsSync(fontPath)) return
     try { registerFont(fontPath, { family, weight }) } catch { /* ignore */ }
+    try { if (GlobalFonts && GlobalFonts.registerFromPath) GlobalFonts.registerFromPath(fontPath, family) } catch { /* ignore */ }
 }
-tryRegisterFont('NotoSans-Regular.ttf', 'Noto Sans', 'normal')
-tryRegisterFont('NotoSans-Bold.ttf', 'Noto Sans', 'bold')
-tryRegisterFont('NotoSerif-Regular.ttf', 'Noto Serif', 'normal')
-tryRegisterFont('NotoSerif-Bold.ttf', 'Noto Serif', 'bold')
+const loadCertFonts = () => {
+    tryRegisterFont('NotoSans-Regular.ttf', 'Noto Sans', 'normal')
+    tryRegisterFont('NotoSans-Bold.ttf', 'Noto Sans', 'bold')
+    tryRegisterFont('NotoSerif-Regular.ttf', 'Noto Serif', 'normal')
+    tryRegisterFont('NotoSerif-Bold.ttf', 'Noto Serif', 'bold')
+    try { if (GlobalFonts && GlobalFonts.loadFontsFromDir) GlobalFonts.loadFontsFromDir(CERT_FONT_DIR) } catch { /* ignore */ }
+    try { if (GlobalFonts && GlobalFonts.loadSystemFonts) GlobalFonts.loadSystemFonts() } catch { /* ignore */ }
+}
+loadCertFonts()
 
 if (IS_PROD) {
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASS) throw new Error('ADMIN_USER va ADMIN_PASS majburiy.')
