@@ -404,7 +404,6 @@ function getCertCopy(lang, student, result) {
         fieldLine: `Yo'nalish: ${direction || '-'}   Kurs: ${course || '-'}   Sana: ${date || '-'}`,
         footerLabel: "Muhammad al-Xorazmiy nomidagi Toshkent axborot texnologiyalari universiteti o'quv ishlari bo'yicha prorektori",
         footerName: 'Tashev Komil Axmatovich',
-        footerNote: 'shuni tasdiqlaydi',
         qrLabel: 'QR orqali tekshirish'
     }
 }
