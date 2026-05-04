@@ -444,11 +444,11 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     const logoImage = await getCertificateLogo()
     const centerX = CERT_WIDTH / 2
     const maxWidth = CERT_WIDTH - 210
-    const topShift = logoImage ? 62 : 0
+    const topShift = logoImage ? 96 : 0
 
     if (logoImage) {
-        const plateCenterY = 118
-        const plateRadius = 78
+        const plateCenterY = 130
+        const plateRadius = 102
         ctx.save()
         ctx.shadowColor = 'rgba(9, 30, 66, 0.24)'
         ctx.shadowBlur = 24
@@ -467,13 +467,15 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
         ctx.stroke()
         ctx.restore()
 
-        const maxLogoW = 122
-        const maxLogoH = 122
+        const maxLogoW = 176
+        const maxLogoH = 176
         const logoScale = Math.min(maxLogoW / logoImage.width, maxLogoH / logoImage.height)
         const drawW = Math.max(1, Math.round(logoImage.width * logoScale))
         const drawH = Math.max(1, Math.round(logoImage.height * logoScale))
         const drawX = Math.round(centerX - drawW / 2)
         const drawY = Math.round(plateCenterY - drawH / 2)
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
         ctx.drawImage(logoImage, drawX, drawY, drawW, drawH)
     }
 
