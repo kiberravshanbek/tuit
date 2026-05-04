@@ -4,9 +4,11 @@ const mongoose = require('mongoose')
 const ExcelJS = require('exceljs')
 const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType, AlignmentType } = require('docx')
 const path = require('path')
+const fs = require('fs')
 const multer = require('multer')
 const crypto = require('crypto')
 const { createCanvas, loadImage } = require('@napi-rs/canvas')
+const { registerFont } = require('@napi-rs/canvas/node-canvas')
 const QRCode = require('qrcode')
 const archiver = require('archiver')
 
@@ -56,6 +58,16 @@ const CERT_THEMES = [
     { bg: '#F0FDF4', primary: '#065F46', accent: '#052E16', highlight: '#DCFCE7' },
     { bg: '#FFF7ED', primary: '#9A3412', accent: '#7C2D12', highlight: '#FFEDD5' },
 ]
+const CERT_FONT_DIR = path.join(__dirname, 'assets', 'fonts')
+const tryRegisterFont = (file, family, weight='normal') => {
+    const fontPath = path.join(CERT_FONT_DIR, file)
+    if (!fs.existsSync(fontPath)) return
+    try { registerFont(fontPath, { family, weight }) } catch { /* ignore */ }
+}
+tryRegisterFont('NotoSans-Regular.ttf', 'Noto Sans', 'normal')
+tryRegisterFont('NotoSans-Bold.ttf', 'Noto Sans', 'bold')
+tryRegisterFont('NotoSerif-Regular.ttf', 'Noto Serif', 'normal')
+tryRegisterFont('NotoSerif-Bold.ttf', 'Noto Serif', 'bold')
 
 if (IS_PROD) {
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASS) throw new Error('ADMIN_USER va ADMIN_PASS majburiy.')
@@ -225,13 +237,13 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
 
     ctx.fillStyle = theme.primary
     ctx.textAlign = 'center'
-    ctx.font = 'bold 72px "Times New Roman"'
+    ctx.font = 'bold 72px "Noto Serif", serif'
     ctx.fillText(copy.title, centerX, 150)
-    ctx.font = '26px Arial'
+    ctx.font = '26px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
     ctx.fillText(copy.subtitle, centerX, 190)
 
-    ctx.font = 'bold 54px "Times New Roman"'
+    ctx.font = 'bold 54px "Noto Serif", serif'
     ctx.fillStyle = theme.accent
     ctx.fillText(copy.name, centerX, 300)
 
@@ -242,7 +254,7 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     ctx.lineTo(CERT_WIDTH - 260, 320)
     ctx.stroke()
 
-    ctx.font = '28px Arial'
+    ctx.font = '28px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
     let y = 380
     const maxWidth = CERT_WIDTH - 240
@@ -251,16 +263,16 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
         y += 8
     }
 
-    ctx.font = '24px Arial'
+    ctx.font = '24px "Noto Sans", sans-serif'
     y += 12
     y = drawParagraph(ctx, copy.fieldLine, centerX, y, maxWidth, 32)
 
     const footerY = CERT_HEIGHT - 170
     ctx.textAlign = 'left'
-    ctx.font = '20px Arial'
+    ctx.font = '20px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
     ctx.fillText(copy.footerLabel, 120, footerY)
-    ctx.font = 'bold 22px Arial'
+    ctx.font = 'bold 22px "Noto Sans", sans-serif'
     ctx.fillText(copy.footerName, 120, footerY + 28)
     ctx.strokeStyle = theme.primary
     ctx.lineWidth = 1
@@ -269,7 +281,7 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     ctx.lineTo(520, footerY + 42)
     ctx.stroke()
 
-    ctx.font = '16px Arial'
+    ctx.font = '16px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
     ctx.fillText(`ID: ${result._id}`, 120, CERT_HEIGHT - 70)
 
@@ -279,7 +291,7 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     const qrY = CERT_HEIGHT - 330
     ctx.drawImage(qrImg, qrX, qrY, 220, 220)
     ctx.textAlign = 'center'
-    ctx.font = '18px Arial'
+    ctx.font = '18px "Noto Sans", sans-serif'
     ctx.fillStyle = theme.accent
     ctx.fillText(copy.qrLabel, qrX + 110, qrY + 245)
 
