@@ -61,6 +61,7 @@ const CERT_THEMES = [
 ]
 const CERT_FONT_DIR = path.join(__dirname, 'assets', 'fonts')
 const CERT_FONTS = { serif: null, serifBold: null, sans: null, sansBold: null }
+const CERT_CANVAS_FONTS = { serif: 'Times New Roman', sans: 'Arial' }
 const tryRegisterFont = (file, family, weight='normal') => {
     const fontPath = path.join(CERT_FONT_DIR, file)
     if (!fs.existsSync(fontPath)) return
@@ -89,6 +90,11 @@ const loadCertFonts = () => {
     CERT_FONTS.serifBold = loadOpentypeFont('NotoSerif-Bold.ttf')
     try { if (GlobalFonts && GlobalFonts.loadFontsFromDir) GlobalFonts.loadFontsFromDir(CERT_FONT_DIR) } catch { /* ignore */ }
     try { if (GlobalFonts && GlobalFonts.loadSystemFonts) GlobalFonts.loadSystemFonts() } catch { /* ignore */ }
+    const families = Array.isArray(GlobalFonts?.families) ? GlobalFonts.families : []
+    const familyByLower = new Map(families.map((f) => [String(f.family || '').toLowerCase(), String(f.family || '')]))
+    const pick = (preferred, fallback) => familyByLower.get(String(preferred || '').toLowerCase()) || familyByLower.get(String(fallback || '').toLowerCase()) || fallback
+    CERT_CANVAS_FONTS.sans = pick('Noto Sans', 'Arial')
+    CERT_CANVAS_FONTS.serif = pick('Noto Serif', 'Times New Roman')
 }
 loadCertFonts()
 
@@ -177,8 +183,10 @@ function drawTextLine(ctx, font, text, x, y, align, size) {
     if (font && typeof font.getPath === 'function') {
         try {
             const path = font.getPath(raw, startX, y, size)
-            path.draw(ctx)
-            return
+            if (Array.isArray(path?.commands) && path.commands.length > 0) {
+                path.draw(ctx)
+                return
+            }
         } catch {
             // fall back to fillText
         }
@@ -296,13 +304,14 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     const copy = getCertCopy(lang, student, result)
     const centerX = CERT_WIDTH / 2
 
+    ctx.font = `bold 72px "${CERT_CANVAS_FONTS.serif}"`
     ctx.fillStyle = theme.primary
     drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.title, centerX, 150, 'center', 72)
-    ctx.font = '26px "Noto Sans", sans-serif'
+    ctx.font = `26px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
     drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.subtitle, centerX, 190, 'center', 26)
 
-    ctx.font = 'bold 54px "Noto Serif", serif'
+    ctx.font = `bold 54px "${CERT_CANVAS_FONTS.serif}"`
     ctx.fillStyle = theme.accent
     drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.name, centerX, 300, 'center', 54)
 
@@ -313,7 +322,7 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     ctx.lineTo(CERT_WIDTH - 260, 320)
     ctx.stroke()
 
-    ctx.font = '28px "Noto Sans", sans-serif'
+    ctx.font = `28px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
     let y = 380
     const maxWidth = CERT_WIDTH - 240
@@ -322,16 +331,16 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
         y += 8
     }
 
-    ctx.font = '24px "Noto Sans", sans-serif'
+    ctx.font = `24px "${CERT_CANVAS_FONTS.sans}"`
     y += 12
     y = drawParagraph(ctx, copy.fieldLine, centerX, y, maxWidth, 32, 'center', CERT_FONTS.sans || CERT_FONTS.serif, 24)
 
     const footerY = CERT_HEIGHT - 170
     ctx.textAlign = 'left'
-    ctx.font = '20px "Noto Sans", sans-serif'
+    ctx.font = `20px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
     drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.footerLabel, 120, footerY, 'left', 20)
-    ctx.font = 'bold 22px "Noto Sans", sans-serif'
+    ctx.font = `bold 22px "${CERT_CANVAS_FONTS.sans}"`
     drawTextLine(ctx, CERT_FONTS.sansBold || CERT_FONTS.sans || CERT_FONTS.serif, copy.footerName, 120, footerY + 28, 'left', 22)
     ctx.strokeStyle = theme.primary
     ctx.lineWidth = 1
@@ -340,7 +349,7 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     ctx.lineTo(520, footerY + 42)
     ctx.stroke()
 
-    ctx.font = '16px "Noto Sans", sans-serif'
+    ctx.font = `16px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
     drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, `ID: ${result._id}`, 120, CERT_HEIGHT - 70, 'left', 16)
 
@@ -350,7 +359,7 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     const qrY = CERT_HEIGHT - 330
     ctx.drawImage(qrImg, qrX, qrY, 220, 220)
     ctx.textAlign = 'center'
-    ctx.font = '18px "Noto Sans", sans-serif'
+    ctx.font = `18px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
     drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.qrLabel, qrX + 110, qrY + 245, 'center', 18)
 
