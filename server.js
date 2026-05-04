@@ -59,15 +59,9 @@ const CERT_THEMES = [
     { bgStart: '#ECFEF8', bgEnd: '#F7FFFC', primary: '#0A6A5A', accent: '#073A32', highlight: '#C9F5E6', wave: '#0EA58A', glow: 'rgba(86, 211, 178, 0.55)', grid: 'rgba(8, 120, 96, 0.22)' },
     { bgStart: '#FFF5EC', bgEnd: '#FFF9F3', primary: '#A14C15', accent: '#57270B', highlight: '#FFE2C8', wave: '#E67D2E', glow: 'rgba(242, 163, 93, 0.52)', grid: 'rgba(186, 96, 34, 0.20)' },
 ]
-const CERT_LOGO_PATHS = [
-    path.join(__dirname, 'assets', 'logo', 'tatu-logo.png'),
-    path.join(__dirname, 'assets', 'logo', 'TATU_logo.png'),
-    path.join(__dirname, 'assets', 'logo', 'tatu.png'),
-]
 const CERT_FONT_DIR = path.join(__dirname, 'assets', 'fonts')
 const CERT_FONTS = { serif: null, serifBold: null, sans: null, sansBold: null }
 const CERT_CANVAS_FONTS = { serif: 'Times New Roman', sans: 'Arial' }
-let certLogoPromise = null
 const tryRegisterFont = (file, family, weight='normal') => {
     const fontPath = path.join(CERT_FONT_DIR, file)
     if (!fs.existsSync(fontPath)) return
@@ -103,27 +97,6 @@ const loadCertFonts = () => {
     CERT_CANVAS_FONTS.serif = pick('Noto Serif', 'Times New Roman')
 }
 loadCertFonts()
-
-async function getCertificateLogo() {
-    if (!certLogoPromise) {
-        certLogoPromise = (async () => {
-            for (const logoPath of CERT_LOGO_PATHS) {
-                if (!fs.existsSync(logoPath)) continue
-                try {
-                    return await loadImage(logoPath)
-                } catch {
-                    // try next file
-                }
-            }
-            return null
-        })()
-    }
-    try {
-        return await certLogoPromise
-    } catch {
-        return null
-    }
-}
 
 if (IS_PROD) {
     if (!process.env.ADMIN_USER || !process.env.ADMIN_PASS) throw new Error('ADMIN_USER va ADMIN_PASS majburiy.')
@@ -441,54 +414,19 @@ async function renderCertificatePng({ student, result, lang, variant, verifyUrl 
     drawCertificateBackground(ctx, theme, variant)
 
     const copy = getCertCopy(lang, student, result)
-    const logoImage = await getCertificateLogo()
     const centerX = CERT_WIDTH / 2
     const maxWidth = CERT_WIDTH - 210
-    const topShift = logoImage ? 96 : 0
-
-    if (logoImage) {
-        const plateCenterY = 130
-        const plateRadius = 102
-        ctx.save()
-        ctx.shadowColor = 'rgba(9, 30, 66, 0.24)'
-        ctx.shadowBlur = 24
-        ctx.shadowOffsetY = 5
-        ctx.fillStyle = 'rgba(255,255,255,0.95)'
-        ctx.beginPath()
-        ctx.arc(centerX, plateCenterY, plateRadius, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.restore()
-
-        ctx.save()
-        ctx.strokeStyle = theme.primary
-        ctx.lineWidth = 2.4
-        ctx.beginPath()
-        ctx.arc(centerX, plateCenterY, plateRadius, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.restore()
-
-        const maxLogoW = 176
-        const maxLogoH = 176
-        const logoScale = Math.min(maxLogoW / logoImage.width, maxLogoH / logoImage.height)
-        const drawW = Math.max(1, Math.round(logoImage.width * logoScale))
-        const drawH = Math.max(1, Math.round(logoImage.height * logoScale))
-        const drawX = Math.round(centerX - drawW / 2)
-        const drawY = Math.round(plateCenterY - drawH / 2)
-        ctx.imageSmoothingEnabled = true
-        ctx.imageSmoothingQuality = 'high'
-        ctx.drawImage(logoImage, drawX, drawY, drawW, drawH)
-    }
 
     ctx.font = `bold 78px "${CERT_CANVAS_FONTS.serif}"`
     ctx.fillStyle = theme.primary
-    drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.title, centerX, 146 + topShift, 'center', 78)
+    drawTextLine(ctx, CERT_FONTS.serifBold || CERT_FONTS.serif, copy.title, centerX, 146, 'center', 78)
 
     ctx.font = `28px "${CERT_CANVAS_FONTS.sans}"`
     ctx.fillStyle = theme.accent
-    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.subtitle, centerX, 196 + topShift, 'center', 28)
+    drawTextLine(ctx, CERT_FONTS.sans || CERT_FONTS.serif, copy.subtitle, centerX, 196, 'center', 28)
 
     ctx.font = `bold 34px "${CERT_CANVAS_FONTS.serif}"`
-    let y = 246 + topShift
+    let y = 246
     y = drawParagraph(ctx, copy.universityLines || [], centerX, y, maxWidth, 44, 'center', CERT_FONTS.serifBold || CERT_FONTS.serif, 34)
 
     y += 14
