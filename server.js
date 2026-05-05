@@ -20,6 +20,10 @@ const ADMIN_USER = process.env.ADMIN_USER || 'admin'
 const ADMIN_PASS = process.env.ADMIN_PASS || 'Ar$20020604Mat'
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-key-change-this-in-production-environments-now'
 const MONGODB_URI = process.env.MONGODB_URI
+const REGISTRATION_OPEN = (() => {
+    const raw = String(process.env.REGISTRATION_OPEN || 'true').toLowerCase()
+    return !['0','false','no','off'].includes(raw)
+})()
 
 const MIN_TEST_DURATION = 5, MAX_TEST_DURATION = 180
 const parsedDuration = Number.parseInt(process.env.TEST_DURATION_MIN || '30', 10)
@@ -696,6 +700,7 @@ app.use(express.static(path.join(__dirname,'public')))
 // ============ API ROUTES ============
 app.post('/api/register',requireSameOrigin,limitReg,async(req,res)=>{
     try {
+        if (!REGISTRATION_OPEN) return res.status(403).json({success:false,message:"Ro`yxatdan o`tish yopilgan. Vaqt tugadi."})
         const fn=nt(req.body.full_name,MAX_REGISTER_FIELD_LEN),dir=nt(req.body.direction,MAX_REGISTER_FIELD_LEN),course=nt(req.body.course,40),email=ne(req.body.email),phone=nt(req.body.phone,MAX_PHONE_LEN)
         if (!fn||!dir||!course||!email||!phone) return res.status(400).json({success:false,message:"Barcha maydonlarni to`ldiring"})
         if (!VALID_COURSES.has(course)) return res.status(400).json({success:false,message:"Kurs qiymati noto`g`ri"})
@@ -716,6 +721,7 @@ app.post('/api/login',requireSameOrigin,(req,res)=>{
 app.post('/api/logout',requireSameOrigin,(req,res)=>{ req.session.destroy(()=>{res.clearCookie('olimpiada.sid');res.json({success:true})}) })
 app.get('/api/me',(req,res)=>res.json({isAdmin:!!(req.session&&req.session.isAdmin)}))
 app.get('/api/health',(req,res)=>res.json({success:true,status:'ok',now:new Date().toISOString(),uptimeSec:Math.round(process.uptime())}))
+app.get('/api/registration-status',(req,res)=>res.json({open:REGISTRATION_OPEN}))
 
 app.get('/api/students',requireAuth,async(req,res)=>{ const r=await Student.find().sort({created_at:-1}).lean(); res.json({success:true,data:r.map(x=>({...x,id:x._id}))}) })
 app.delete('/api/students/:id',requireAuth,requireSameOrigin,async(req,res)=>{ try { const r=await Student.findByIdAndDelete(req.params.id); if(!r) return res.status(404).json({success:false,message:'Talaba topilmadi'}); res.json({success:true}) } catch { return res.status(400).json({success:false,message:'Noto`g`ri ID'}) } })

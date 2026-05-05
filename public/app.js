@@ -1,3 +1,34 @@
+let registrationOpen = true
+const REG_TEXT = {
+    uz: { msg:"Ro'yxatdan o'tish yopilgan. Vaqt tugadi.", btn:"Ro'yxatdan o'tish yopildi" },
+    ru: { msg:"Регистрация закрыта. Время истекло.", btn:"Регистрация закрыта" }
+}
+
+function applyRegistrationState() {
+    if (registrationOpen) return
+    const lang = localStorage.getItem('lang') || 'uz'
+    const t = REG_TEXT[lang] || REG_TEXT.uz
+    const form = document.getElementById('regForm')
+    const btn = document.getElementById('submitBtn')
+    const msg = document.getElementById('message')
+    if (form) form.querySelectorAll('input,select,button').forEach((el) => { el.disabled = true })
+    if (btn) btn.textContent = t.btn
+    if (msg) { msg.textContent = t.msg; msg.className = 'message error' }
+}
+
+async function loadRegistrationStatus() {
+    try {
+        const res = await fetch('/api/registration-status')
+        const data = await res.json()
+        registrationOpen = !!(data && data.open)
+    } catch {
+        registrationOpen = true
+    }
+    applyRegistrationState()
+}
+
+loadRegistrationStatus()
+
 document.getElementById('regForm').addEventListener('submit', async (e) => {
     e.preventDefault()
     const btn = document.getElementById('submitBtn')
@@ -17,10 +48,18 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {
         "Telefon raqam formati noto`g`ri":"Неверный формат номера телефона",
         "Bu email allaqachon ro`yxatdan o`tgan":"Этот email уже зарегистрирован",
         "Muvaffaqiyatli ro`yxatdan o`tdingiz!":"Вы успешно зарегистрировались!",
+        "Ro`yxatdan o`tish yopilgan. Vaqt tugadi.":"Регистрация закрыта. Время истекло.",
         "Server xatosi":"Ошибка сервера",
     }
     const t = TR[lang] || TR.uz
     const trMsg = (m) => { if (!m||lang!=='ru') return m; return MSG_RU[m]||m }
+
+    if (!registrationOpen) {
+        const rt = REG_TEXT[lang] || REG_TEXT.uz
+        msg.textContent = rt.msg
+        msg.className = 'message error'
+        return
+    }
 
     btn.disabled = true; btn.textContent = t.sending
     msg.className = 'message hidden'

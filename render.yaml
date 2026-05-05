@@ -16,10 +16,8 @@ services:
         sync: false  # Set strong admin password in Render dashboard (min 12 chars)
       - key: SESSION_SECRET
         sync: false  # Set long random secret in Render dashboard (min 32 chars)
-    disk:
-      name: olimpiada-data
-      mountPath: /data
-      sizeGB: 1
+      - key: REGISTRATION_OPEN
+        sync: false  # Set "false" to close registration
     disk:
       name: olimpiada-data
       mountPath: /data
